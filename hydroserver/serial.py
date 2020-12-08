@@ -1,17 +1,22 @@
 import enum
+import glob
 import logging
 import threading
 import time
 
 import termios
 from serial import Serial, SerialException
+from hydroserver import app
 
 
 log = logging.getLogger(__name__)
+# CONSTANTS
+baud_rate = 19200
+serial_prefix = app.config["SERIAL_PREFIX"]
 
 
 # todo: move to config, or auto scan
-SERIAL_PORTS = ['/dev/ttyUSB0', '/dev/ttyUSB1']
+# SERIAL_PORTS = ['/dev/ttyUSB0', '/dev/ttyUSB1']
 
 
 class SerialCommand(enum.Enum):
@@ -130,16 +135,26 @@ class MyArduino:
         return self.__str__()
 
 
-def scan():
+def get_connected_devices():
+    devices = glob.glob("/dev/{}*".format(serial_prefix))
+    log.info("Connected devices (prefix '{}'): {}".format(serial_prefix, devices))
+    return devices
+
+
+def scan(exclude=None):
     """
     Run scan for all configured serial ports
     """
+    if not exclude:
+        exclude = []
     log.info("Scanning for serial devices...")
     found_devices = []
-    for port in SERIAL_PORTS:
-        baud = 19200
+    for port in get_connected_devices():
+        if port in exclude:
+            log.info("{}: skipping...".format(port))
+            continue
         try:
-            device = MyArduino(port, baud)
+            device = MyArduino(port, baud_rate)
         except SerialException as e:
             log.warning(e)
             continue

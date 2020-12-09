@@ -32,6 +32,10 @@ db = SQLAlchemy(app)
 CORS(app, resources={r'/*': {'origins': '*'}})
 
 
+from hydroserver import routes, models
+from hydroserver.serial import scan
+
+
 # todo: REMOVE
 # [3] clear DB
 log.info("dropping database...")
@@ -39,9 +43,6 @@ db.drop_all()
 log.info("recreating database...")
 db.create_all()
 
-
-from hydroserver import routes, models
-from hydroserver.serial import scan
 
 
 def init_device(device):

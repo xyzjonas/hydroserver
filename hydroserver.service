@@ -1,12 +1,12 @@
+# Service settings for my RPi
 [Unit]
 Description=<a description of your application>
 After=network.target
 
 [Service]
-User=jobrauer
-WorkingDirectory=/home/jobrauer/Projects/hydro-server/server
-#ExecStartPre=source /home/jobrauer/.virtualenvs/hydro-server/bin/activate
-ExecStart=/home/jobrauer/.virtualenvs/hydro-server/bin/gunicorn -b localhost:8000  hydroserver:app
+User=jonas
+WorkingDirectory=/opt/hydroserver
+ExecStart=/opt/hydroserver/venv/bin/gunicorn -b localhost:8000  hydroserver:app
 Restart=always
 
 [Install]

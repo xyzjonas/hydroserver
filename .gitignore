@@ -3,6 +3,10 @@
 # Learn more about .gitignore:
 #     https://www.atlassian.com/git/tutorials/saving-changes/gitignore
 
+# My Virtualenv in deployment
+venv/*
+
+
 # Node artifact files
 node_modules/
 dist/

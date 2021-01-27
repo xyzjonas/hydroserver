@@ -6,6 +6,9 @@
 # My Virtualenv in deployment
 venv/*
 
+# Database file
+*/hydro.db
+
 
 # Node artifact files
 node_modules/

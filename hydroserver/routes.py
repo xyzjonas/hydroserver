@@ -246,7 +246,7 @@ def get_cache():
 
 @app.route('/devices/scan', methods=['POST'])
 def scan_devices():
-    CACHE.clear()
+    CACHE.clear_devices()
     found_devices = scan()
     for device in found_devices:
         if init_device(device):

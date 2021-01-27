@@ -78,6 +78,7 @@ class Scheduler:
             active_tasks = sorted(to_be_scheduled, key=lambda t: t.scheduled_time)
             log.debug(f"{len(active_tasks)} active tasks: {active_tasks}")
             if active_tasks:
+                no_task_limit = 0
                 up_next = active_tasks[0]
 
                 # figure out the execution time and delta

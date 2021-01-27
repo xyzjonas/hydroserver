@@ -1,0 +1,12 @@
+<VirtualHost *:80>
+
+    ServerName www.hydroserver.home
+    #ServerAlias www.django.com
+
+    ProxyPassMatch "/(.*)$" "http://localhost:8000/devices/$1"
+    <Location "/">
+        ProxyPass "http://localhost:8000/devices/"
+    </Location>
+
+</VirtualHost>
+

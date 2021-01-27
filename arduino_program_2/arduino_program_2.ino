@@ -14,6 +14,12 @@ void setup() {
   pinMode(LED_G, OUTPUT);
   Serial.begin(BAUD);
   digitalWrite(LED_G, HIGH);
+  delay(100);
+  digitalWrite(LED_G, LOW);
+  delay(100);
+  digitalWrite(LED_G, HIGH);
+  delay(100);
+  digitalWrite(LED_G, LOW);
 }
 
 // the loop function runs over and over again forever
@@ -33,7 +39,8 @@ void loop() {
     
     } else if (data == action + BLINK) {
       ok_blink(LED_G);
-      String res = "status:ok";
+      String res = "status:ok,";
+      res = res + BLINK + ":" + readPin(LED_G);
       Serial.println(res);
     
     } else {
@@ -46,7 +53,8 @@ void loop() {
 String full_status() {
   
   String response = "uuid:" + getUuid() + ",";
-  response = response + BLINK + ":" + readPin(LED_G);
+  response = response + BLINK + ":" + readPin(LED_G) + ",";
+  response = response + "status:ok";
   return response;
 }
 

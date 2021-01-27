@@ -15,6 +15,12 @@ class Config(object):
     STATUS_OK = "ok"
     STATUS_FAIL = "error"
 
+    # Scheduler
+    RECONNECT_ATTEMPTS = 10
+    IDLE_INTERVAL_SECONDS = 10
+    SAFE_INTERVAL = 1.8  # seconds left to ignore and execute right away
+    MAX_WORKERS = 4  # max threads to execute simultaneously
+
     PRECONFIGURED_COMMAND = {
         "ping": "ping",
         "status": "status",

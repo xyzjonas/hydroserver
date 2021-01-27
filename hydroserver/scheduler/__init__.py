@@ -5,17 +5,18 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 
-from hydroserver import db
+from hydroserver import db, CACHE, Config
 from hydroserver.device import DeviceException
 from hydroserver.device.serial import SerialDevice
 from hydroserver.models import Device, Task
-from hydroserver.scheduler.tasks import ScheduledTask
+from hydroserver.scheduler.tasks import ScheduledTask, \
+    TaskException, TaskNotCreatedException
 
 log = logging.getLogger(__name__)
-MAX_WORKERS = 4  # max threads to execute simultaneously
-SAFE_INTERVAL = 1.8  # seconds left to ignore and execute right away
-RECONNECT_ATTEMPTS = 10
-IDLE_INTERVAL_SECONDS = 10
+MAX_WORKERS = Config.MAX_WORKERS
+SAFE_INTERVAL = Config.SAFE_INTERVAL
+RECONNECT_ATTEMPTS = Config.RECONNECT_ATTEMPTS
+IDLE_INTERVAL_SECONDS = Config.IDLE_INTERVAL_SECONDS
 
 
 class Scheduler:
@@ -28,37 +29,39 @@ class Scheduler:
         self.device = device
         self.executor = ThreadPoolExecutor(max_workers=MAX_WORKERS)
         self.device_uuid = self.device.uuid
+        self.__running = False
+
+    def __repr__(self):
+        return f"<Scheduler (device={self.device_uuid}, running={self.__running})>"
 
     def run(self):
         self.__loop()
 
-    def __device_health_check(self, attempts):
-        if self.device.is_responding:
-            return True
-        log.info(f"{self.device} is offline, checking if something changed...")
-        self.device.read_status()
-        if self.device.is_responding:
-            return True
-        return False
+    @property
+    def is_running(self):
+        return self.__running
 
     def __loop(self):
         """
-        1) grabs device tasks from DB
-        2) sorts by which is to be scheduled the earliest
-        3) wait until at least '< safe interval'
-        4) execute
+        * grabs device tasks from DB
+        * sorts by which is to be scheduled the earliest
+        * wait until at least '< safe interval'
+        * execute
         """
         attempts = 0
         no_task_limit = 0
         last_executed = set()
+        self.__running = True
         while True:
             # 1) Healthcheck
-            if not self.__device_health_check(attempts):
+            if not self.__device_health_check(self.device):
                 self.__set_is_offline(self.device_uuid)
                 attempts += 1
                 if attempts > RECONNECT_ATTEMPTS:
                     log.warning(f"{self.device} offline, stopping scheduling...")
                     self.executor.shutdown(wait=True)
+                    self.__running = False
+                    CACHE.remove_scheduler(self.device_uuid)
                     return
                 to_be_scheduled = set()
                 log.warning("Device offline, schedule cleared "
@@ -66,10 +69,10 @@ class Scheduler:
             else:
                 attempts = 0
                 to_be_scheduled = {
-                    ScheduledTask.from_db_object(t)
-                    # ScheduledTask(t.id, croniter(t.cron).get_next(datetime))
+                    self.__sanitize_task_input(t)
                     for t in self.__load_tasks_from_db(self.device)
                 }.difference(last_executed)
+                to_be_scheduled = {t for t in to_be_scheduled if t}
 
             # 2) handle tasks
             active_tasks = sorted(to_be_scheduled, key=lambda t: t.scheduled_time)
@@ -88,7 +91,7 @@ class Scheduler:
                     try:
                         up_next.runnable.run(self.device)
                         self.__set_task_success(up_next.task_id)
-                    except DeviceException as e:
+                    except (DeviceException, TaskException) as e:
                         self.__set_task_failed(up_next.task_id, e)
                     last_executed.add(up_next)
                     time_to_next = timedelta(milliseconds=1)
@@ -99,6 +102,8 @@ class Scheduler:
                     log.warning(f"{self.device} no tasks received for quite some "
                                 "time, stopping scheduling...")
                     self.executor.shutdown(wait=True)
+                    self.__running = False
+                    CACHE.remove_scheduler(self.device_uuid)
                     return
 
             # 3) Time delta shenanigans
@@ -114,6 +119,32 @@ class Scheduler:
             # 4) Obligatory sleep
             log.debug(f"sleeping for {time_to_next.total_seconds()}")
             time.sleep(time_to_next.total_seconds())
+
+    @staticmethod
+    def __device_health_check(device):
+        if device.is_responding:
+            return True
+        log.info(f"{device} is offline, checking if something changed...")
+
+        try:
+            device.read_status()
+        except DeviceException as e:
+            log.error(f"Status failed: {e}")
+            return False
+
+        if device.is_responding:
+            return True
+        return False
+
+    @staticmethod
+    def __sanitize_task_input(task):
+        try:
+            return ScheduledTask.from_db_object(task)
+        except TaskNotCreatedException as e:
+            task.last_run = datetime.utcnow()
+            task.last_run_success = False
+            task.last_run_error = str(e)
+            db.session.commit()
 
     @staticmethod
     def __load_tasks_from_db(serial_device):

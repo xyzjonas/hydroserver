@@ -1,10 +1,11 @@
 import threading
 
-from croniter import croniter, CroniterNotAlphaError
+from croniter import croniter, CroniterNotAlphaError, CroniterBadCronError
 from flask import jsonify, request
 
 from hydroserver import app, CACHE, db, init_device
 from hydroserver.models import Device, Task, Control, Sensor
+from hydroserver.device import DeviceException
 from hydroserver.device.serial import scan
 from hydroserver.scheduler import Scheduler
 
@@ -132,7 +133,7 @@ def post_device_tasks(device_id):
     if data.get("cron"):
         try:
             croniter(data["cron"])
-        except CroniterNotAlphaError:
+        except (CroniterNotAlphaError, CroniterBadCronError):
             return f"Invalid cron definition: '{data['cron']}'", 400
         task.cron = data.get("cron")
     if data.get("condition"):
@@ -161,6 +162,7 @@ def post_device_tasks(device_id):
     if created and len(Task.query.all()) == 1:
         # start up the scheduler for the device
         executor = Scheduler(CACHE.get_active_device(device.uuid))
+        CACHE.add_scheduler(device.uuid, executor)
         threading.Thread(target=executor.run).start()
 
     return (f"New task created: {task}", 201) if created \
@@ -189,7 +191,7 @@ def modify_device(device_id):
 
 @app.route('/devices/<string:device_id>/action', methods=['POST'])
 def device_action(device_id):
-    device = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
+    device_db = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
     data = request.json
     if not data:
         return "No data received", 400
@@ -197,29 +199,49 @@ def device_action(device_id):
     if "control" not in data:
         return "'control' field is required", 400
 
-    control = Control.query.filter_by(name=data["control"], device=device).first()
+    control = Control.query.filter_by(name=data["control"], device=device_db).first()
     if not control:
-        return f"{device.name}: no such control '{data['control']}'", 400
+        return f"{device_db.name}: no such control '{data['control']}'", 400
 
-    command = f"action_{control.name}"
+    # command = f"action_{control.name}"
 
-    serial_device = CACHE.get_active_device(device.uuid)
-    if not serial_device:
-        return f"{device.name} not connected", 503
+    device = CACHE.get_active_device(device_db.uuid)
+    if not device:
+        return f"{device_db.name} not connected", 503
 
     try:
-        serial_response = serial_device.send_command(command)
-        # todo: make serial response more of an object
-        if "ok" not in serial_response:
-            return f"{device.name}: '{command}' ERROR - {serial_response}", 500
-        return f"{device.name}: '{command}' cmd sent successfully: {serial_response}", 200
-    except ConnectionError as e:
-        return f"{device.name}: '{command}' cmd failed: {e}"
+        response = device.send_control(control.name)
+        if not response.is_success:
+            return f"{device}: '{control.name}' ERROR - {response}", 500
+
+        control.state = response.data
+        db.session.commit()
+        return f"{device}: '{control.name}' cmd sent successfully: {response}", 200
+    except DeviceException as e:
+        return f"{device}: '{control.name}' cmd failed: {e}", 500
+
+
+@app.route('/devices/<string:device_id>/scheduler', methods=['POST'])
+def device_run_scheduler(device_id):
+    device_db = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
+    if CACHE.has_active_scheduler(device_db.uuid):
+        return f"'{device_db.name}' has already an active executor.", 200
+    # start up the scheduler for the device
+    executor = Scheduler(CACHE.get_active_device(device_db.uuid))
+    CACHE.add_scheduler(device_db.uuid, executor)
+    threading.Thread(target=executor.run).start()
+    return f"'{device_db.name}' executor started.", 200
 
 
 @app.route('/cache', methods=['GET'])
 def get_cache():
-    return jsonify({k: str(v) for k, v in CACHE.items.items()}), 200
+    data = {}
+    for d in CACHE.get_all_active_devices():
+        data[d.uuid] = {
+            "device": str(d),
+            "scheduler": str(CACHE.get_active_scheduler(d.uuid))
+        }
+    return jsonify(data), 200
 
 
 @app.route('/devices/scan', methods=['POST'])

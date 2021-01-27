@@ -2,6 +2,7 @@ import logging
 from enum import Enum
 
 from hydroserver import Config, db
+# from hydroserver.models import Sensor, Control
 # from hydroserver.models import Device as DeviceDb
 
 
@@ -19,6 +20,7 @@ class Command(Enum):
 class DeviceType(Enum):
     ARDUINO_UNO = "Arduino UNO"
     GENERIC = "Generic device"
+    # ...
 
 
 class Status(Enum):
@@ -52,10 +54,21 @@ class DeviceResponse:
         return self.status == Status.OK
 
     @classmethod
-    def from_response_data(cls, data, status=Status.FAIL):
+    def from_response_data(cls, data, extract_field=None):
         if data.get("status"):
             status = Status.from_string(data.get("status"))
             del data["status"]
+        else:
+            raise DeviceException(
+                f"Response '{data}' does not contain 'status' field.")
+            # log.error(f"Response '{data}' does not contain 'status' field.")
+
+        if extract_field:
+            if not data.get(extract_field):
+                raise DeviceException(
+                    f"Response does not contain '{extract_field}' field.")
+            data = data.get(extract_field)
+
         return DeviceResponse(status, data)
 
 
@@ -92,39 +105,61 @@ class Device:
         log.debug(f"{self}: received '{data}'")
         return data
 
-    def read_status(self):
+    def read_status(self, strict=True):
         """
         READ full device status (expecting dev info + sensors/controls values
         :rtype: DeviceResponse
         """
-        return DeviceResponse.from_response_data(
+        response = DeviceResponse.from_response_data(
             self.send_command(Command.STATUS.value))
 
-    def read_sensor(self, sensor):
+        if not response.is_success and strict:
+            raise DeviceException(
+                f"{self}: status read failed '{response}'")
+
+        return response
+
+    def read_sensor(self, sensor: str, strict=True):
         """
         READ a sensor value and return number
         :rtype: DeviceResponse
         """
-        if type(sensor) is not str:
-            sensor = sensor.name
-
         response = DeviceResponse.from_response_data(
-            self.send_command(Command.SENSOR.value, sensor))
-        if response.data.get(sensor):
-            val = response.data.get(sensor)
-            response.data = float(val)
+            self.send_command(Command.SENSOR.value, sensor), extract_field=sensor)
+
+        if not response.is_success and strict:
+            raise DeviceException(
+                f"{self}: '{sensor}' sensor read failed '{response}'")
+
+        try:
+            response.data = float(response.data)
+        except TypeError:
+            if strict:
+                raise DeviceException(
+                    f"{self}: received value '{response.data}' is not a number")
 
         return response
 
-    def send_control(self, control):
+    def send_control(self, control: str, strict=True):
         """
         SEND a control command
         :rtype: DeviceResponse
         """
-        if type(control) is not str:
-            control = control.name
-        return DeviceResponse.from_response_data(
-            self.send_command(Command.CONTROL.value, control))
+        response = DeviceResponse.from_response_data(
+            self.send_command(Command.CONTROL.value, control), extract_field=control)
+
+        if not response.is_success and strict:
+            raise DeviceException(
+                f"{self}: '{control}' control failed '{response}'")
+
+        if not response.data and strict:
+            raise DeviceException(
+                f"{self}: no response value '{response}'")
+
+        response.data = float(response.data)
+        if Config.INVERT_BOOLEAN:
+            response.data = not float(response.data)
+        return response
 
     @staticmethod
     def _parse_response(response_string):

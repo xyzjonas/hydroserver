@@ -14,6 +14,16 @@ from croniter import croniter, CroniterNotAlphaError
 log = logging.getLogger(__name__)
 
 
+class TaskException(Exception):
+    """Generic device exception"""
+    pass
+
+
+class TaskNotCreatedException(TaskException):
+    """Generic device exception"""
+    pass
+
+
 class TaskType(Enum):
     TOGGLE = "toggle"
     INTERVAL = "interval"
@@ -69,24 +79,25 @@ class TaskRunnable:
         if typ == TaskType.STATUS:
             return Status()
         elif typ == TaskType.TOGGLE:
-            return Toggle(task)
+            return Toggle(task.id)
         elif typ == TaskType.INTERVAL:
-            return Interval(task)
+            return Interval(task.id)
         else:
-            raise ValueError(f"Unknown task type")
+            raise TaskNotCreatedException(f"Unknown task type")
 
 
 class Toggle(TaskRunnable):
     type = TaskType.TOGGLE
 
-    def __init__(self, task: TaskDb):
-        self.control = task.control
+    def __init__(self, task_id: int):
+        self.task_id = task_id
 
     def run(self, device: Device):
+        control = TaskDb.query.filter_by(id=self.task_id).first().control
         log.info(f"{device}: running {self.type}")
-        response = device.send_control(self.control)
-        if not response.is_success:
-            log.error(f"{device}: failed to toggle '{self.control}'")
+        response = device.send_control(control.name)
+        control.state = response.data
+        db.session.commit()
 
 
 class Interval(TaskRunnable):
@@ -98,41 +109,55 @@ class Interval(TaskRunnable):
             interval = ast.literal_eval(string)
             if type(interval) is list:
                 if len(interval) != 2:
-                    raise ValueError(
+                    raise TaskException(
                         f"Invalid 'interval' field length (!=2): '{string}'.")
                 if interval[0] > interval[1]:
-                    raise ValueError(f"Invalid interval '{interval}'.")
+                    raise TaskException(f"Invalid interval '{interval}'.")
                 return interval
         except SyntaxError:
             pass
-        raise ValueError(f"Invalid 'interval' field: '{string}'.")
+        raise TaskException(f"Invalid 'interval' field: '{string}'.")
 
-    def __init__(self, task: TaskDb):
-        self.control = task.control
-
+    def __init__(self, task_id: int):
+        # self.control = task.control
+        self.task_id = task_id
+        task = TaskDb.query.filter_by(id=task_id).first()
         if not task.sensor:
-            raise ValueError(f"Sensor needed for '{self.type}' task.")
-        self.sensor = task.sensor
-
+            raise TaskNotCreatedException(f"Sensor needed for '{self.type}' task.")
+        # self.sensor = task.sensor
         if not task.interval:
-            raise ValueError(f"'interval' field needed for '{self.type}' task.")
+            raise TaskNotCreatedException(f"'interval' field needed for '{self.type}' task.")
         self.interval = Interval.__parse_interval(task.interval)
 
     def run(self, device: Device):
         log.info(f"{device}: running {self.type}")
-        response = device.read_sensor(self.sensor)
-        if not response.is_success:
-            raise DeviceException(f"Invalid response: {response}")
+        sensor = TaskDb.query.filter_by(id=self.task_id).first().sensor
+        control = TaskDb.query.filter_by(id=self.task_id).first().control
+
+        response = device.read_sensor(sensor.name)
         value = response.data
-        if self.interval[0] < value < self.interval[1]:
-            log.info(f"{device}: {value} inside interval {self.interval}, skipping.")
+
+        def toggle(dev, c):
+            r = dev.send_control(c.name)
+            log.info(f"{dev}: {c} toggled.")
+            c.state = r.data
+            db.session.commit()
+
+        if value < self.interval[0] and not control.state:
+            log.info(f"{device}: {value} < {self.interval[0]}, switching on.")
+            toggle(device, control)
             return
 
-        response = device.send_control(self.control)
-        if response.is_success:
-            log.info(f"{device}: {self.control} toggled.")
-        else:
-            log.error(f"{device}: Failed to toggle {self.control}.")
+        if self.interval[0] <= value <= self.interval[1] and control.state:
+            log.info(
+                f"{device}: {value} inside interval {self.interval}, switching off.")
+            toggle(device, control)
+            return
+
+        if value > self.interval[1] and control.state:
+            log.info(f"{device}: {value} > {self.interval[1]}, switching off.")
+            toggle(device, control)
+            return
 
 
 class Status(TaskRunnable):
@@ -141,11 +166,9 @@ class Status(TaskRunnable):
     def run(self, device: Device):
         log.info(f"{device}: running {self.type}")
         response = device.read_status()
-        if not response.is_success:
-            log.error(f"{device}: failed to read status.")
-            return
+
         try:
-            d = DeviceDb.by_status_response(device, response.data)
+            d = DeviceDb.from_status_response(device, response.data)
             db.session.add(d)
             db.session.commit()
         except Exception as e:

@@ -25,7 +25,7 @@ db = SQLAlchemy(app)
 def init_device(dev):
     status = dev.read_status()
     if status.is_success:
-        d = models.Device.by_status_response(dev, status.data)
+        d = models.Device.from_status_response(dev, status.data)
         db.session.add(d)
         db.session.commit()
         return True
@@ -47,7 +47,7 @@ log.info("recreating database...")
 db.create_all()
 
 
-found_devices = scan(exclude=[dev.port for dev in CACHE.active_devices])
+found_devices = scan(exclude=[dev.port for dev in CACHE.get_all_active_devices()])
 for device in found_devices:
     if init_device(device):
         CACHE.add_active_device(device)

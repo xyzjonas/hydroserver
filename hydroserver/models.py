@@ -1,7 +1,7 @@
 import logging
 
 from datetime import datetime
-from hydroserver import db
+from hydroserver import db, CACHE
 from hydroserver.config import Config
 from hydroserver.device import Device as PhysicalDevice
 from sqlalchemy import event
@@ -10,91 +10,6 @@ from sqlalchemy.orm import relationship
 log = logging.getLogger(__name__)
 NOT_APPLICABLE = 'N/A'
 
-
-x = {
-    "Sensors": [
-        {
-            "id": "w_temp",
-            "name": "water temperature",
-            "unit": "deg_c"
-        },
-        {
-            "id": "a_temp",
-            "name": "air temperature",
-            "unit": "deg_c"
-        },
-        {
-            "id": "a_hum",
-            "name": "air humidity",
-            "unit": "percentage"
-        },
-        {
-            "id": "light_01",
-            "name": "light 1",
-            "unit": "bool"  # or LUM
-        },
-        {
-            "id": "ph",
-            "name": "ph",
-            "unit": "None"
-        },
-    ],
-    "Controls": [
-        {
-            "id": "heat",
-            "name": "heating mat",
-        },
-        {
-            "id": "light_01",
-            "name": "light 1",
-        },
-        {
-            "id": "pump_01",
-            "name": "Ph pump",
-        }
-    ],
-    "Tasks": [
-        {
-            "id": 0,
-            "name": "Read status",
-            "detail": {
-                "type": "read",
-                "cmd": "status",
-            },
-            "cron": "* * * * *"
-        },
-        {
-            "id": 1,
-            "name": "Keep air temperature",
-            "detail": {
-                "type": "regulate",
-                "sensor": "a_temp",
-                "control": "heat",
-                "interval": [25, 27],
-            },
-            "cron": "*/5 * * * *"
-        },
-        {
-            "id": 2,
-            "name": "Toggle lights",
-            "control": "switch_01",
-            "sensor": None,
-            "condition": "always",
-            "cron": "0 7 * * *",
-        },
-        {
-            "id": 3,
-            "name": "Toggle heat",
-            "control": "switch_02",
-            "sensor": "temp",
-            "condition": "interval:25-28",
-            "cron": "0 23 * * *",
-        }
-    ]
-}
-
-
-# device.sensors[LIGHT]
 
 class Base(db.Model):
     __abstract__ = True
@@ -210,6 +125,7 @@ class Device(Base):
         d['sensors'] = [s.dictionary for s in self.sensors]
         d['controls'] = [c.dictionary for c in self.controls]
         d['tasks'] = [t.dictionary for t in self.tasks]
+        d['scheduler_running'] = CACHE.has_active_scheduler(self.uuid)
         return d
 
     def __repr__(self):
@@ -227,6 +143,7 @@ class Device(Base):
                     Sensor.query.filter_by(name=key, device=self).first() \
                         .last_value = value
 
+    # todo: Take controls from self -> move init to create only
     def update_controls(self, data: dict):
         configured = Config.PRECONFIGURED_MAPPINGS["controls"]
         for key, value in data.items():
@@ -243,14 +160,16 @@ class Device(Base):
         return Device.query.filter_by(uuid=device.uuid).first()
 
     @classmethod
-    def by_status_response(cls, device: PhysicalDevice, status: dict):
+    def from_status_response(cls,
+                             device: PhysicalDevice, status: dict, create=True):
         d = Device.query_by_serial_device(device)
-        if not d:
+        if not d and create:
             d = Device(uuid=device.uuid, name=str(device))
-        d.update_sensors(status)
-        d.update_controls(status)
-        d.is_online = True
-        d.last_seen_online = datetime.utcnow()
+        if d:
+            d.update_sensors(status)
+            d.update_controls(status)
+            d.is_online = True
+            d.last_seen_online = datetime.utcnow()
         return d
 
 

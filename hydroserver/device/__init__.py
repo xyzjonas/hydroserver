@@ -2,8 +2,6 @@ import logging
 from enum import Enum
 
 from hydroserver import Config, db
-# from hydroserver.models import Sensor, Control
-# from hydroserver.models import Device as DeviceDb
 
 
 log = logging.getLogger(__name__)
@@ -77,7 +75,7 @@ class Device:
     device_type = DeviceType.GENERIC
 
     def __repr__(self):
-        return f"<{self.__name__} (type={self.device_type.value})>"
+        return f"<{self.__class__.__name__} (type={self.device_type.value})>"
 
     @property
     def uuid(self):
@@ -175,3 +173,13 @@ class Device:
                 key, value = item.split(":")
                 data[key] = value
         return data
+
+
+from hydroserver.device.serial import scan as serial_scan
+from hydroserver.device.mock import scan as mock_scan
+
+
+def scan():
+    scans = serial_scan() or []
+    scans.extend(mock_scan(num=2))
+    return scans

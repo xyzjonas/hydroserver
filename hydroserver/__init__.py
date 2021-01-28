@@ -36,8 +36,9 @@ def init_device(dev):
 CORS(app, resources={r'/*': {'origins': '*'}})
 
 from hydroserver import routes, models
-from hydroserver.scheduler import Scheduler
-from hydroserver.device.serial import scan
+# from hydroserver.scheduler import Scheduler
+# from hydroserver.device.serial import scan
+from hydroserver.device import scan
 
 # todo: REMOVE
 # [3] clear DB
@@ -47,7 +48,10 @@ log.info("recreating database...")
 db.create_all()
 
 
-found_devices = scan(exclude=[dev.port for dev in CACHE.get_all_active_devices()])
+# found_devices = scan(exclude=[dev.port for dev in CACHE.get_all_active_devices()])
+found_devices = scan(
+    # exclude=[dev.port for dev in CACHE.get_all_active_devices()]
+)
 for device in found_devices:
     if init_device(device):
         CACHE.add_active_device(device)

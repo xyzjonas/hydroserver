@@ -79,6 +79,14 @@ def get_device_tasks(device_id):
     return jsonify([t.dictionary for t in d.tasks])
 
 
+@app.route('/devices/<int:device_id>/tasks/<int:task_id>', methods=['DELETE'])
+def delete_device_task(device_id, task_id):
+    task = Task.query.filter_by(id=_get_id(task_id)).first_or_404()
+    db.session.delete(task)
+    db.session.commit()
+    return f"task '{task_id}' deleted", 200
+
+
 @app.route('/devices/<int:device_id>/tasks', methods=['DELETE'])
 def delete_device_tasks(device_id):
     # todo: make a generic 'delete' function

@@ -1,6 +1,6 @@
 import logging
 import time
-
+import traceback
 
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
@@ -39,7 +39,11 @@ class Scheduler:
 
     @property
     def is_running(self):
-        return self.__running
+        try:
+            return self.__running
+        except Exception as e:
+            traceback.print_exc(e)
+            self.__running = False
 
     def __loop(self):
         """
@@ -53,7 +57,7 @@ class Scheduler:
         last_executed = set()
         self.__running = True
         while True:
-            # 1) Healthcheck
+            # 1) Health-check
             if not self.__device_health_check(self.device):
                 self.__set_is_offline(self.device_uuid)
                 attempts += 1

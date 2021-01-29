@@ -58,8 +58,7 @@ class DeviceResponse:
             del data["status"]
         else:
             raise DeviceException(
-                f"Response '{data}' does not contain 'status' field.")
-            # log.error(f"Response '{data}' does not contain 'status' field.")
+                f"Response '{data or None}' does not contain 'status' field.")
 
         if extract_field:
             if not data.get(extract_field):

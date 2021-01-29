@@ -167,12 +167,15 @@ class Device(Base):
         configured = Config.PRECONFIGURED_MAPPINGS["controls"]
         for key, value in data.items():
             if key in configured:
-                if key not in [s.name for s in self.controls]:
-                    Control(name=key, device=self,
-                            description=configured[key].get('description'))
-                else:
-                    c = Control.query.filter_by(name=key, device=self).first()
-                    c.state = not bool(value) if Config.INVERT_BOOLEAN else bool(value)
+                c = Control.query.filter_by(name=key, device=self).first()
+                if not c:
+                    c = Control(name=key, device=self,
+                                description=configured[key].get('description'))
+                    try:
+                        x = int(value)
+                    except Exception:
+                        x = 1
+                    c.state = not bool(x) if Config.INVERT_BOOLEAN else bool()
 
     @classmethod
     def query_by_serial_device(cls, device: PhysicalDevice):
@@ -184,6 +187,8 @@ class Device(Base):
         d = Device.query_by_serial_device(device)
         if not d and create:
             d = Device(uuid=device.uuid, name=str(device))
+            db.session.add(d)
+            db.session.commit()
         if d:
             d.update_sensors(status)
             d.update_controls(status)

@@ -92,7 +92,7 @@ class Toggle(TaskRunnable):
     def __init__(self, task_id: int):
         self.task_id = task_id
         task = TaskDb.query.filter_by(id=task_id).first()
-        if not task.sensor:
+        if not task.control:
             raise TaskNotCreatedException(f"Control needed for '{self.type}' task.")
 
     def run(self, device: Device):
@@ -129,8 +129,8 @@ class Interval(TaskRunnable):
         if not task.sensor:
             raise TaskNotCreatedException(f"Sensor needed for '{self.type}' task.")
 
-        if not task.sensor:
-            raise TaskNotCreatedException(f"Sensor needed for '{self.type}' task.")
+        if not task.control:
+            raise TaskNotCreatedException(f"Control needed for '{self.type}' task.")
 
         # self.sensor = task.sensor
         if not task.task_metadata.get("interval"):

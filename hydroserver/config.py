@@ -41,7 +41,7 @@ class Config(object):
             },
             "water_level": {
                 "description": "water level",
-                "unit": "NaN"
+                "unit": None
             }
         },
         "controls": {
@@ -49,6 +49,7 @@ class Config(object):
                 "description": "switch 1"
             },
             "switch_02": {
+                "description": "switch 2"
             },
             "blink": {
                 "description": "Just a blinking LED"

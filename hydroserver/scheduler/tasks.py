@@ -156,12 +156,6 @@ class Interval(TaskRunnable):
             toggle(device, control)
             return
 
-        if self.interval[0] <= value <= self.interval[1] and control.state:
-            log.info(
-                f"{device}: {value} inside interval {self.interval}, switching off.")
-            toggle(device, control)
-            return
-
         if value > self.interval[1] and control.state:
             log.info(f"{device}: {value} > {self.interval[1]}, switching off.")
             toggle(device, control)

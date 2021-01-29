@@ -1,7 +1,7 @@
 import logging
 from enum import Enum
 
-from hydroserver import Config, db
+from hydroserver import Config
 
 
 log = logging.getLogger(__name__)
@@ -77,10 +77,7 @@ class Device:
     def __repr__(self):
         return f"<{self.__class__.__name__} (type={self.device_type.value})>"
 
-    @property
-    def uuid(self):
-        return self._get_uuid()
-
+    # to be overridden
     def _send_raw(self, string):
         """
         Per device type implementation
@@ -91,6 +88,19 @@ class Device:
 
     def _get_uuid(self):
         pass
+
+    @property
+    def is_connected(self):
+        return False
+
+    @property
+    def is_responding(self):
+        return self.uuid is not None
+    # END
+
+    @property
+    def uuid(self):
+        return self._get_uuid()
 
     def send_command(self, *args, separator=""):
         """
@@ -180,6 +190,12 @@ from hydroserver.device.mock import scan as mock_scan
 
 
 def scan():
+    import os
+    try:
+        mocked_devices = os.getenv("MOCK_DEV", "0")
+        mocked_devices = int(mocked_devices)
+    except Exception:
+        mocked_devices = 0
     scans = serial_scan() or []
-    scans.extend(mock_scan(num=2))
+    scans.extend(mock_scan(num=mocked_devices))
     return scans

@@ -1,5 +1,5 @@
-import ast
 import logging
+import re
 
 from datetime import datetime
 from enum import Enum
@@ -91,6 +91,9 @@ class Toggle(TaskRunnable):
 
     def __init__(self, task_id: int):
         self.task_id = task_id
+        task = TaskDb.query.filter_by(id=task_id).first()
+        if not task.sensor:
+            raise TaskNotCreatedException(f"Control needed for '{self.type}' task.")
 
     def run(self, device: Device):
         control = TaskDb.query.filter_by(id=self.task_id).first().control
@@ -105,17 +108,18 @@ class Interval(TaskRunnable):
 
     @staticmethod
     def __parse_interval(string):
-        try:
-            interval = ast.literal_eval(string)
-            if type(interval) is list:
-                if len(interval) != 2:
-                    raise TaskException(
-                        f"Invalid 'interval' field length (!=2): '{string}'.")
-                if interval[0] > interval[1]:
-                    raise TaskException(f"Invalid interval '{interval}'.")
-                return interval
-        except SyntaxError:
-            pass
+        """Expect xx-yy format"""
+        i = string.split("-")
+
+        if len(i) == 2:
+            try:
+                left = float(i[0])
+                right = float(i[1])
+                if left > right:
+                    raise ValueError
+                return [left, right]
+            except (ValueError, TypeError):
+                pass
         raise TaskException(f"Invalid 'interval' field: '{string}'.")
 
     def __init__(self, task_id: int):
@@ -124,10 +128,14 @@ class Interval(TaskRunnable):
         task = TaskDb.query.filter_by(id=task_id).first()
         if not task.sensor:
             raise TaskNotCreatedException(f"Sensor needed for '{self.type}' task.")
+
+        if not task.sensor:
+            raise TaskNotCreatedException(f"Sensor needed for '{self.type}' task.")
+
         # self.sensor = task.sensor
-        if not task.interval:
+        if not task.task_metadata.get("interval"):
             raise TaskNotCreatedException(f"'interval' field needed for '{self.type}' task.")
-        self.interval = Interval.__parse_interval(task.interval)
+        self.interval = Interval.__parse_interval(task.task_metadata["interval"])
 
     def run(self, device: Device):
         log.info(f"{device}: running {self.type}")

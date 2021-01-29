@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 
 from hydroserver import db, CACHE, Config
 from hydroserver.device import DeviceException
-from hydroserver.device.serial import SerialDevice
+from hydroserver.device import Device as PhysicalDevice
 from hydroserver.models import Device, Task
 from hydroserver.scheduler.tasks import ScheduledTask, \
     TaskException, TaskNotCreatedException
@@ -25,14 +25,14 @@ class Scheduler:
     Creates schedule based on set up tasks and their crons.
     """
 
-    def __init__(self, device: SerialDevice):
+    def __init__(self, device: PhysicalDevice):
         self.device = device
         self.executor = ThreadPoolExecutor(max_workers=MAX_WORKERS)
         self.device_uuid = self.device.uuid
         self.__running = False
 
     def __repr__(self):
-        return f"<Scheduler (device={self.device_uuid}, running={self.__running})>"
+        return f"<Scheduler (device={self.device}, running={self.__running})>"
 
     def run(self):
         self.__loop()
@@ -58,13 +58,13 @@ class Scheduler:
                 self.__set_is_offline(self.device_uuid)
                 attempts += 1
                 if attempts > RECONNECT_ATTEMPTS:
-                    log.warning(f"{self.device} offline, stopping scheduling...")
+                    log.warning(f"{self}: device offline, stopping scheduling...")
                     self.executor.shutdown(wait=True)
                     self.__running = False
                     CACHE.remove_scheduler(self.device_uuid)
                     return
                 to_be_scheduled = set()
-                log.warning("Device offline, schedule cleared "
+                log.warning(f"{self}: device offline, schedule cleared "
                             f"(attempts={attempts}/{RECONNECT_ATTEMPTS}).")
             else:
                 attempts = 0
@@ -76,7 +76,7 @@ class Scheduler:
 
             # 2) handle tasks
             active_tasks = sorted(to_be_scheduled, key=lambda t: t.scheduled_time)
-            log.debug(f"{len(active_tasks)} active tasks: {active_tasks}")
+            log.debug(f"{self}: {len(active_tasks)} active tasks: {active_tasks}")
             if active_tasks:
                 no_task_limit = 0
                 up_next = active_tasks[0]
@@ -85,8 +85,8 @@ class Scheduler:
                 scheduled_time = up_next.scheduled_time
                 time_to_next = scheduled_time - datetime.utcnow()
 
-                log.debug(f"Up next: id={up_next.task_id}, at {scheduled_time}"
-                          f" (i.e. in {time_to_next})")
+                log.debug(f"{self}: up next: id={up_next.task_id}, "
+                          f"at {scheduled_time} (i.e. in {time_to_next})")
                 # if inside the 'safe interval' execute right away and don't wait
                 if time_to_next <= timedelta(seconds=SAFE_INTERVAL):
                     try:
@@ -100,7 +100,7 @@ class Scheduler:
                 time_to_next = timedelta(seconds=IDLE_INTERVAL_SECONDS)
                 no_task_limit += 1
                 if no_task_limit > RECONNECT_ATTEMPTS:
-                    log.warning(f"{self.device} no tasks received for quite some "
+                    log.warning(f"{self}: no tasks received for quite some "
                                 "time, stopping scheduling...")
                     self.executor.shutdown(wait=True)
                     self.__running = False
@@ -118,7 +118,7 @@ class Scheduler:
                 time_to_next = time_to_next - timedelta(seconds=SAFE_INTERVAL / 2)
 
             # 4) Obligatory sleep
-            log.debug(f"sleeping for {time_to_next.total_seconds()}")
+            log.debug(f"{self}: sleeping for {time_to_next.total_seconds()}")
             time.sleep(time_to_next.total_seconds())
 
     @staticmethod

@@ -87,42 +87,16 @@ def delete_device_task(device_id, task_id):
     return f"task '{task_id}' deleted", 200
 
 
-@app.route('/devices/<int:device_id>/tasks', methods=['DELETE'])
-def delete_device_tasks(device_id):
-    # todo: make a generic 'delete' function
-    Device.query.filter_by(id=_get_id(device_id)).first_or_404()
-    data = request.json
-    if not data:
-        return "No data received", 400
-
-    if "id" not in data:
-        return "task 'id' field is required", 400
-
-    task_id = data["id"]
-    task = Task.query.filter_by(id=_get_id(task_id)).first()
-    if not task:
-        return f"No such task '{task_id}'", 400
-    db.session.delete(task)
-    db.session.commit()
-    return f"task '{task_id}' deleted", 200
-
-
 @app.route('/devices/<int:device_id>/tasks', methods=['POST'])
 def post_device_tasks(device_id):
     device = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
     data = request.json
+
     if not data:
         return "No data received", 400
 
-    if "control" not in data:
-        return "'control' field is required", 400
-
-    control = Control.query.filter_by(name=data["control"], device=device).first()
-    if not control:
-        return f"{device.name}: no such control '{data['control']}", 400
-
-    if data.get("sensor") and data["sensor"] not in [s.name for s in device.sensors]:
-        return f"{device.name}: no such sensor '{data['sensor']}", 400
+    if not data.get("type"):
+        return "'type' field required", 400
 
     # Are we creating a new item or modifying an existing one...?
     created = False
@@ -130,39 +104,43 @@ def post_device_tasks(device_id):
         task = Task.query.filter_by(id=data["id"]).first()
         if not task:
             return f"No such task for device {device.name}", 400
-        task.control = control
     else:
-        task = Task(control=control, device=device)
+        task = Task(device=device)
         created = True
 
-    # Fill the rest
-    if data.get("name"):
-        task.name = data.get("name")
+    # SANITAZING input
+    if data.get("control"):
+        control = Control.query.filter_by(name=data["control"],
+                                          device=device).first()
+        if not control:
+            return f"{device.name}: no such control '{data['control']}", 400
+        task.control = control
+
+    if data.get("sensor"):
+        sensor = Sensor.query.filter_by(name=data["sensor"], device=device).first()
+        if not sensor:
+            return f"{device.name}: no such sensor '{data['sensor']}", 400
+        task.sensor = sensor
+
     if data.get("cron"):
         try:
             croniter(data["cron"])
         except (CroniterNotAlphaError, CroniterBadCronError):
             return f"Invalid cron definition: '{data['cron']}'", 400
         task.cron = data.get("cron")
+
+    # Fill the rest
+    if data.get("name"):
+        task.name = data.get("name")
+
     if data.get("condition"):
         task.condition = data.get("condition")
-    if data.get("sensor"):
-        sensor = Sensor.query.filter_by(name=data["sensor"], device=device).first()
-        task.sensor = sensor
+
     if data.get("type"):
         task.type = data.get("type")
-    # todo: refactor
-    if data.get("interval"):
-        def __sanitize(string: str):
-            i = string.split(",")
-            if len(i) == 2:
-                try:
-                    left, right = [float(j) for j in i]
-                    return f"[{left}, {right}]"
-                except Exception:
-                    pass
-        if __sanitize(data.get("interval")):
-            task.interval = __sanitize(data.get("interval"))
+
+    if data.get("meta") and type(data.get("meta")) == dict:
+        task.task_metadata = data.get("meta")
 
     db.session.add(task)
     db.session.commit()

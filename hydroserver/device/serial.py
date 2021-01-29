@@ -105,10 +105,6 @@ class SerialDevice(Device):
         return self.__send(self.serial, string)
 
     @property
-    def is_responding(self):
-        return self.uuid is not None
-
-    @property
     def is_connected(self):
         return self.serial is not None
 
@@ -116,8 +112,7 @@ class SerialDevice(Device):
         return self.__repr__()
 
     def __repr__(self):
-        return f"<SerialDevice (type={self.device_type.value}," \
-               f"port={self.port}, baud={self.baud})>"
+        return f"{super().__repr__()[:-2]}, port={self.port}, baud={self.baud}"
 
 
 def get_connected_devices():

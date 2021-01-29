@@ -1,3 +1,4 @@
+import json
 import logging
 
 from datetime import datetime
@@ -76,7 +77,9 @@ class Task(Base):
     name = db.Column(db.String(80), default="Unnamed task")
     cron = db.Column(db.String(80), default="* * * * *")
     type = db.Column(db.String(80), nullable=True)
-    interval = db.Column(db.String(80), nullable=True)
+
+    # store any task specifics
+    _task_meta = db.Column(db.String(200), nullable=True)
 
     last_run = db.Column(db.DateTime, nullable=True)
     last_run_success = db.Column(db.Boolean(), default=False)
@@ -93,13 +96,29 @@ class Task(Base):
 
     def __repr__(self):
         s = self.sensor.name if self.sensor else "NaN"
+        c = self.control.name if self.control else "NaN"
         return f"<Task (id={self.id}, name={self.name}, device={self.device_id}, " \
-               f"interval={self.interval}, cron={self.cron}, " \
-               f"sensor={s}, control={self.control.name})>"
+               f"cron={self.cron}, sensor={s}, control={c})>"
+
+    @property
+    def task_metadata(self):
+        if not self._task_meta:
+            return {}
+        return json.loads(self._task_meta)
+
+    @task_metadata.setter
+    def task_metadata(self, md: dict):
+        self._task_meta = json.dumps(md)
+
+    @task_metadata.deleter
+    def task_metadata(self):
+        self._task_meta = None
 
     @property
     def dictionary(self):
-        return self._to_dict()
+        d = self._to_dict()
+        d["meta"] = self.task_metadata
+        return d
 
 
 class Device(Base):

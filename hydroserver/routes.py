@@ -37,7 +37,20 @@ def get_device_sensors(device_id):
     d = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
     return jsonify([s.dictionary for s in d.sensors])
 
-# todo:post_device_sensors
+
+@app.route('/devices/<int:device_id>/sensors/<int:sensor_id>', methods=['POST'])
+def post_device_sensor(device_id, sensor_id):
+    s = Sensor.query.filter_by(id=_get_id(sensor_id)).first_or_404()
+    data = request.json
+    if not data:
+        return "No data received", 400
+
+    if "description" in data:
+        s.description = data["description"]
+        db.session.commit()
+        return f"'{s.name}' modified.", 200
+
+    return f"'{s.name}' not modified.", 304
 
 
 @app.route('/devices/<int:device_id>/controls', methods=['GET'])
@@ -46,31 +59,20 @@ def get_device_controls(device_id):
     return jsonify([c.dictionary for c in d.controls])
 
 
-@app.route('/devices/<int:device_id>/controls', methods=['POST'])
-def post_device_controls(device_id):
+@app.route('/devices/<int:device_id>/controls/<int:control_id>', methods=['POST'])
+def post_device_control(device_id, control_id):
     # todo: (!) active device keeps adding new controls/sensors if e.g. renamed
-    d = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
+    c = Control.query.filter_by(id=_get_id(control_id)).first_or_404()
     data = request.json
     if not data:
         return "No data received", 400
-    if "control" not in data:
-        return "'control' field is required", 400
-    c = Control.query.filter_by(name=data["control"], device=d).first()
-    if not c:
-        return f"No such control '{data['control']}", 400
 
-    changes = {}
-    for key, value in data.items():
-        try:
-            changes[getattr(c, key)] = value
-            setattr(c, key, value)
-        except AttributeError:
-            pass
+    if "description" in data:
+        c.description = data["description"]
+        db.session.commit()
+        return f"'{c.name}' modified.", 200
 
-    db.session.commit()
-
-    changes = [f"'{k}' -> '{v}'" for k, v in changes.items()]
-    return f"'{c.name}' modified: {changes}"
+    return f"'{c.name}' not modified.", 304
 
 
 @app.route('/devices/<int:device_id>/tasks', methods=['GET'])

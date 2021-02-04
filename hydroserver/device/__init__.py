@@ -16,8 +16,11 @@ class Command(Enum):
 
 
 class DeviceType(Enum):
-    ARDUINO_UNO = "Arduino UNO"
-    GENERIC = "Generic device"
+    SERIAL = "serial"
+    WIFI = "wifi"
+    ZIGBEE = "zigbee"
+    BLUETOOTH = "bluetooth"
+    GENERIC = "generic"
     # ...
 
 

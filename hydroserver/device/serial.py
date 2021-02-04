@@ -35,7 +35,7 @@ class DeviceNotRespondingException(DeviceException):
 
 class SerialDevice(Device):
 
-    device_type = DeviceType.ARDUINO_UNO
+    device_type = DeviceType.SERIAL
     TIMEOUT = 5
     WAIT_FOR_RESPONSE = 0.1
 

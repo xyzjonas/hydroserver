@@ -1,3 +1,4 @@
+import logging
 import threading
 
 from croniter import croniter, CroniterNotAlphaError, CroniterBadCronError
@@ -8,6 +9,9 @@ from hydroserver.models import Device, Task, Control, Sensor
 from hydroserver.device import DeviceException
 from hydroserver.device.serial import scan
 from hydroserver.scheduler import Scheduler
+
+
+log = logging.getLogger(__name__)
 
 
 def _get_id(string_or_int):
@@ -207,6 +211,64 @@ def device_action(device_id):
         return f"{device}: '{control.name}' cmd sent successfully: {response}", 200
     except DeviceException as e:
         return f"{device}: '{control.name}' cmd failed: {e}", 500
+
+
+@app.route('/devices/<string:device_id>/categorize', methods=['POST'])
+def post_device_categorize(device_id):
+    device = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
+    data = request.json
+    if not data:
+        return "No data received", 400
+    name = data.get("name")
+    if not name:
+        return "'name' field required", 400
+    t = data.get("type")
+    if not t:
+        return "'type' field required", 400
+    unit = data.get("unit") or None
+    description = data.get("description") or "unnamed"
+
+    if t == "sensor":
+        item = Sensor(name=data.get("name"), description=description,
+                      unit=unit, device=device, last_value=-1)
+    elif t == "control":
+        item = Control(name=data.get("name"), description=description,
+                       device=device, state=False)
+    else:
+        return f"Unrecognized sensor type '{t}'", 400
+
+    db.session.add(item)
+    cmds = device.unknown_commands
+    del cmds[name]
+    device.unknown_commands = cmds
+    db.session.commit()
+    return f"{t} successfully created", 201
+
+
+@app.route(
+    '/devices/<string:device_id>/controls/<int:control_id>', methods=['DELETE'])
+def delete_control(device_id, control_id):
+    device = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
+    control = Control.query.filter_by(id=_get_id(control_id)).first_or_404()
+
+    name = control.name
+    device.put_unknown_command(name, control.state)
+    db.session.delete(control)
+    db.session.commit()
+    return f"'{name}' deleted.", 200
+
+
+@app.route(
+    '/devices/<string:device_id>/sensors/<int:sensor_id>', methods=['DELETE'])
+def delete_sensor(device_id, sensor_id):
+    device = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
+    sensor = Sensor.query.filter_by(id=_get_id(sensor_id)).first_or_404()
+
+    name = sensor.name
+    device.put_unknown_command(name, sensor.last_value)
+    db.session.delete(sensor)
+    db.session.commit()
+    return f"'{name}' deleted.", 200
 
 
 @app.route('/devices/<string:device_id>/scheduler', methods=['POST'])

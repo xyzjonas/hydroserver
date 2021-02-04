@@ -12,6 +12,10 @@ log = logging.getLogger(__name__)
 NOT_APPLICABLE = 'N/A'
 
 
+class UnexpectedModelException(Exception):
+    pass
+
+
 class Base(db.Model):
     __abstract__ = True
     id = db.Column(db.Integer, primary_key=True)
@@ -118,6 +122,8 @@ class Task(Base):
     def dictionary(self):
         d = self._to_dict()
         d["meta"] = self.task_metadata
+        d["sensor"] = self.sensor.dictionary if self.sensor else None
+        d["control"] = self.control.dictionary if self.control else None
         return d
 
 
@@ -128,54 +134,82 @@ class Device(Base):
     time_modified = db.Column(db.DateTime, nullable=True)
     last_seen_online = db.Column(db.DateTime, nullable=True)
 
-    # Unique for device: hard-coded in the Arduino sketch
+    # Unique for device: e.g. hard-coded in the Arduino sketch or MAC from ESP32
     uuid = db.Column(db.String(80), unique=True, nullable=True)
     # Human readable, user can change it to his liking
     name = db.Column(db.String(80), nullable=False)
+    type = db.Column(db.String(80), nullable=True)
 
     is_online = db.Column(db.Boolean(), default=False)
     # sensors (=backref)
     # controls (=backref)
     # tasks (=backref)
 
+    # store any unreckognized device attributes (for later triage)
+    _unknown_commands = db.Column(db.String(500), nullable=True)
+
+    @property
+    def unknown_commands(self):
+        if not self._unknown_commands:
+            return {}
+        return json.loads(self._unknown_commands)
+
+    @unknown_commands.setter
+    def unknown_commands(self, data: dict):
+        self._unknown_commands = json.dumps(data)
+
+    def put_unknown_command(self, command, value):
+        # todo: thread safe?
+        if not self._unknown_commands:
+            data = {}
+        else:
+            data = json.loads(self._unknown_commands)
+        data[command] = value
+        self._unknown_commands = json.dumps(data)
+
     @property
     def dictionary(self):
         d = self._to_dict()
-        d['sensors'] = [s.dictionary for s in self.sensors]
-        d['controls'] = [c.dictionary for c in self.controls]
-        d['tasks'] = [t.dictionary for t in self.tasks]
+        d['sensors'] = sorted(
+            [s.dictionary for s in self.sensors], key=lambda t: t['id'])
+        d['controls'] = sorted(
+            [c.dictionary for c in self.controls], key=lambda t: t['id'])
+        d['tasks'] = sorted(
+            [t.dictionary for t in self.tasks], key=lambda t: t['id'])
         d['scheduler_running'] = CACHE.has_active_scheduler(self.uuid)
+        d['unrecognized'] = self.unknown_commands
         return d
 
     def __repr__(self):
         return f"<Device (uuid={self.uuid}, name={self.name})>"
 
-    def update_sensors(self, data: dict):
-        configured = Config.PRECONFIGURED_MAPPINGS["sensors"]
-        for key, value in data.items():
-            if key in configured:
-                if key not in [s.name for s in self.sensors]:
-                    Sensor(name=key, device=self, last_value=value,
-                           description=configured[key]['description'],
-                           unit=configured[key]['unit'])
-                else:
-                    Sensor.query.filter_by(name=key, device=self).first() \
-                        .last_value = value
+    @staticmethod
+    def __make_bool_up(value):
+        try:
+            x = int(value)
+        except Exception:
+            x = 1
+        return not bool(x) if Config.INVERT_BOOLEAN else bool(x)
 
-    # todo: Take controls from self -> move init to create only
-    def update_controls(self, data: dict):
-        configured = Config.PRECONFIGURED_MAPPINGS["controls"]
+    def update_commands(self, data: dict):
+        """"""
+        controls = [c.name for c in self.controls]
+        sensors = [s.name for s in self.sensors]
         for key, value in data.items():
-            if key in configured:
-                c = Control.query.filter_by(name=key, device=self).first()
-                if not c:
-                    c = Control(name=key, device=self,
-                                description=configured[key].get('description'))
-                    try:
-                        x = int(value)
-                    except Exception:
-                        x = 1
-                    c.state = not bool(x) if Config.INVERT_BOOLEAN else bool()
+            if key in controls:
+                control = Control.query.filter_by(name=key, device=self).first()
+                if not controls:  # todo: necessary?
+                    raise UnexpectedModelException("Key was in controls, but query failed.")
+                control.state = self.__make_bool_up(value)
+            elif key in sensors:
+                sensor = Sensor.query.filter_by(name=key, device=self).first()
+                if not sensor:  # todo: necessary?
+                    raise UnexpectedModelException("Key was in controls, but query failed.")
+                sensor.last_value = value
+            elif getattr(self, key, None):
+                continue
+            else:
+                self.put_unknown_command(key, value)
 
     @classmethod
     def query_by_serial_device(cls, device: PhysicalDevice):
@@ -186,12 +220,12 @@ class Device(Base):
                              device: PhysicalDevice, status: dict, create=True):
         d = Device.query_by_serial_device(device)
         if not d and create:
-            d = Device(uuid=device.uuid, name=str(device))
+            d = Device(uuid=device.uuid, name=str(device),
+                       type=device.device_type.value)
             db.session.add(d)
             db.session.commit()
         if d:
-            d.update_sensors(status)
-            d.update_controls(status)
+            d.update_commands(status)
             d.is_online = True
             d.last_seen_online = datetime.utcnow()
         return d

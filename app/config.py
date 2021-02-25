@@ -10,7 +10,7 @@ class Config(object):
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     DEBUG = True
-    SERIAL_PREFIX = "ttyytUSB"
+    SERIAL_PREFIX = "ttyUSB"
     BAUD_RATE = 19200
     INVERT_BOOLEAN = True  # Python <--> C - boolean inversion
     STATUS_OK = "ok"

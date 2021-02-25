@@ -141,7 +141,7 @@ class Device:
             self.read_status()
             if not self.is_responding:
                 log.error(f"{self}: reconnect failed: "
-                          f"{self.is_connected=}, {self.is_responding=}")
+                          f"connected={self.is_connected}, responding={self.is_responding}")
                 return False
         return True
 
@@ -255,7 +255,7 @@ from app.device.mock import scan as mock_scan
 def scan():
     import os
     try:
-        mocked_devices = os.getenv("MOCK_DEV", "1")
+        mocked_devices = os.getenv("MOCK_DEV", "0")
         mocked_devices = int(mocked_devices)
     except Exception:
         mocked_devices = 0

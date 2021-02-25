@@ -209,7 +209,7 @@ def device_action(device_id):
             return f"{device}: '{control.name}' ERROR - {response}", 500
 
         control.state = response.data
-        log.info(f"!!! CUM SEM: {control.state=}, {response.data}")
+        log.info(f"!!! CUM SEM: state={control.state}, {response.data}")
         db.session.add(control)
         db.session.commit()
         return f"{device}: '{control.name}' cmd sent successfully: {response}", 200

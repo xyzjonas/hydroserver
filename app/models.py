@@ -2,14 +2,18 @@ import json
 import logging
 
 from datetime import datetime
-from hydroserver import db, CACHE
-from hydroserver.config import Config
-from hydroserver.device import Device as PhysicalDevice
+from app import CACHE, db
+from app.config import Config
+from app.device import Device as PhysicalDevice
 from sqlalchemy import event
 from sqlalchemy.orm import relationship
+from flask import current_app
+from flask_sqlalchemy import SQLAlchemy
 
 log = logging.getLogger(__name__)
 NOT_APPLICABLE = 'N/A'
+
+# db = SQLAlchemy()
 
 
 class UnexpectedModelException(Exception):
@@ -39,7 +43,7 @@ class Sensor(Base):
     """
     name = db.Column(db.String(80), nullable=False)
     description = db.Column(db.String(80), nullable=True)
-    last_value = db.Column(db.Float, default=-1)
+    _last_value = db.Column(db.Float, default=-1)
     unit = db.Column(db.String(80), nullable=True)
 
     device_id = db.Column(db.Integer, db.ForeignKey('device.id'), nullable=False)
@@ -50,18 +54,31 @@ class Sensor(Base):
                f"device={self.device_id})>"
 
     @property
+    def last_value(self):
+        return self._last_value
+
+    @last_value.setter
+    def last_value(self, value):
+        try:
+            self._last_value = float(value)
+        except Exception as e:
+            log.error(f"{self}: failed to parse number '{value}': {e}")
+            self._last_value = -1
+
+    @property
     def dictionary(self):
-        return self._to_dict()
+        d = self._to_dict()
+        d['last_value'] = self.last_value
+        return d
 
 
 class Control(Base):
     """
     A controllable entity on the device (e.g. a switch)
     """
-    # possible_controls = ["light", "heat", "fan", "air_stone", "pump", ]
     name = db.Column(db.String(80), nullable=False)
     description = db.Column(db.String(80), nullable=True)
-    state = db.Column(db.Boolean, default=False)
+    _state = db.Column(db.Boolean, default=False)
 
     device_id = db.Column(db.Integer, db.ForeignKey('device.id'), nullable=False)
     device = db.relationship('Device', backref=db.backref('controls', lazy=False))
@@ -70,8 +87,34 @@ class Control(Base):
         return f"<Control (name={self.name}, device={self.device_id})>"
 
     @property
+    def state(self):
+        return self._state
+
+    @state.setter
+    def state(self, value):
+        if type(value) is bool:
+            self._state = value
+            return
+        if type(value) is str:
+            if value in ["True", "true"]:
+                self._state = True
+                return
+            elif value in ["False", "false"]:
+                self._state = False
+                return
+        try:
+            x = int(value)
+        except Exception as e:
+            log.error(f"{self}: failed to parse bool '{value}': {e}")
+            self._state = False
+            return
+        self._state = not bool(x) if Config.INVERT_BOOLEAN else bool(x)
+
+    @property
     def dictionary(self):
-        return self._to_dict()
+        d = self._to_dict()
+        d["state"] = self.state
+        return d
 
 
 class Task(Base):
@@ -183,16 +226,8 @@ class Device(Base):
     def __repr__(self):
         return f"<Device (uuid={self.uuid}, name={self.name})>"
 
-    @staticmethod
-    def __make_bool_up(value):
-        try:
-            x = int(value)
-        except Exception:
-            x = 1
-        return not bool(x) if Config.INVERT_BOOLEAN else bool(x)
-
     def update_commands(self, data: dict):
-        """"""
+        """Update sensor/control values according to a status dict"""
         controls = [c.name for c in self.controls]
         sensors = [s.name for s in self.sensors]
         for key, value in data.items():
@@ -200,13 +235,15 @@ class Device(Base):
                 control = Control.query.filter_by(name=key, device=self).first()
                 if not controls:  # todo: necessary?
                     raise UnexpectedModelException("Key was in controls, but query failed.")
-                control.state = self.__make_bool_up(value)
+                control.state = value
             elif key in sensors:
                 sensor = Sensor.query.filter_by(name=key, device=self).first()
                 if not sensor:  # todo: necessary?
                     raise UnexpectedModelException("Key was in controls, but query failed.")
                 sensor.last_value = value
+
             elif getattr(self, key, None):
+                # skip received device attributes
                 continue
             else:
                 self.put_unknown_command(key, value)

@@ -4,11 +4,13 @@ import threading
 from croniter import croniter, CroniterNotAlphaError, CroniterBadCronError
 from flask import jsonify, request
 
-from hydroserver import app, CACHE, db, init_device
-from hydroserver.models import Device, Task, Control, Sensor
-from hydroserver.device import DeviceException
-from hydroserver.device.serial import scan
-from hydroserver.scheduler import Scheduler
+from app import CACHE, init_device
+from app.main import bp
+from app.models import db, Device, Task, Control, Sensor
+from app.device import DeviceException
+from app.device.wifi import WifiDevice
+from app.device.serial import scan
+from app.scheduler import Scheduler
 
 
 log = logging.getLogger(__name__)
@@ -23,26 +25,26 @@ def _get_id(string_or_int):
         raise ValueError("Supplied id value must be 'str' or 'int'")
 
 
-@app.route('/devices', methods=['GET'])
+@bp.route('/devices', methods=['GET'])
 def all_devices():
     devices = Device.query.all()
     response = [d.dictionary for d in devices]
     return jsonify(response)
 
 
-@app.route('/devices/<int:device_id>', methods=['GET'])
+@bp.route('/devices/<int:device_id>', methods=['GET'])
 def get_device(device_id):
     d = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
     return jsonify(d.dictionary)
 
 
-@app.route('/devices/<int:device_id>/sensors', methods=['GET'])
+@bp.route('/devices/<int:device_id>/sensors', methods=['GET'])
 def get_device_sensors(device_id):
     d = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
     return jsonify([s.dictionary for s in d.sensors])
 
 
-@app.route('/devices/<int:device_id>/sensors/<int:sensor_id>', methods=['POST'])
+@bp.route('/devices/<int:device_id>/sensors/<int:sensor_id>', methods=['POST'])
 def post_device_sensor(device_id, sensor_id):
     s = Sensor.query.filter_by(id=_get_id(sensor_id)).first_or_404()
     data = request.json
@@ -57,13 +59,13 @@ def post_device_sensor(device_id, sensor_id):
     return f"'{s.name}' not modified.", 304
 
 
-@app.route('/devices/<int:device_id>/controls', methods=['GET'])
+@bp.route('/devices/<int:device_id>/controls', methods=['GET'])
 def get_device_controls(device_id):
     d = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
     return jsonify([c.dictionary for c in d.controls])
 
 
-@app.route('/devices/<int:device_id>/controls/<int:control_id>', methods=['POST'])
+@bp.route('/devices/<int:device_id>/controls/<int:control_id>', methods=['POST'])
 def post_device_control(device_id, control_id):
     # todo: (!) active device keeps adding new controls/sensors if e.g. renamed
     c = Control.query.filter_by(id=_get_id(control_id)).first_or_404()
@@ -79,13 +81,13 @@ def post_device_control(device_id, control_id):
     return f"'{c.name}' not modified.", 304
 
 
-@app.route('/devices/<int:device_id>/tasks', methods=['GET'])
+@bp.route('/devices/<int:device_id>/tasks', methods=['GET'])
 def get_device_tasks(device_id):
     d = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
     return jsonify([t.dictionary for t in d.tasks])
 
 
-@app.route('/devices/<int:device_id>/tasks/<int:task_id>', methods=['DELETE'])
+@bp.route('/devices/<int:device_id>/tasks/<int:task_id>', methods=['DELETE'])
 def delete_device_task(device_id, task_id):
     task = Task.query.filter_by(id=_get_id(task_id)).first_or_404()
     db.session.delete(task)
@@ -93,7 +95,7 @@ def delete_device_task(device_id, task_id):
     return f"task '{task_id}' deleted", 200
 
 
-@app.route('/devices/<int:device_id>/tasks', methods=['POST'])
+@bp.route('/devices/<int:device_id>/tasks', methods=['POST'])
 def post_device_tasks(device_id):
     device = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
     data = request.json
@@ -155,13 +157,13 @@ def post_device_tasks(device_id):
         # start up the scheduler for the device
         executor = Scheduler(CACHE.get_active_device(device.uuid))
         CACHE.add_scheduler(device.uuid, executor)
-        threading.Thread(target=executor.run).start()
+        threading.Thread(target=executor.start).start()
 
     return (f"New task created: {task}", 201) if created \
         else (f"Task modified: {task}", 200)
 
 
-@app.route('/devices/<int:device_id>', methods=['POST'])
+@bp.route('/devices/<int:device_id>', methods=['POST'])
 def modify_device(device_id):
     device = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
     data = request.json
@@ -181,7 +183,7 @@ def modify_device(device_id):
         else (f"No changes", 200)
 
 
-@app.route('/devices/<string:device_id>/action', methods=['POST'])
+@bp.route('/devices/<string:device_id>/action', methods=['POST'])
 def device_action(device_id):
     device_db = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
     data = request.json
@@ -207,13 +209,15 @@ def device_action(device_id):
             return f"{device}: '{control.name}' ERROR - {response}", 500
 
         control.state = response.data
+        log.info(f"!!! CUM SEM: {control.state=}, {response.data}")
+        db.session.add(control)
         db.session.commit()
         return f"{device}: '{control.name}' cmd sent successfully: {response}", 200
     except DeviceException as e:
         return f"{device}: '{control.name}' cmd failed: {e}", 500
 
 
-@app.route('/devices/<string:device_id>/categorize', methods=['POST'])
+@bp.route('/devices/<string:device_id>/categorize', methods=['POST'])
 def post_device_categorize(device_id):
     device = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
     data = request.json
@@ -245,7 +249,7 @@ def post_device_categorize(device_id):
     return f"{t} successfully created", 201
 
 
-@app.route(
+@bp.route(
     '/devices/<string:device_id>/controls/<int:control_id>', methods=['DELETE'])
 def delete_control(device_id, control_id):
     device = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
@@ -258,7 +262,7 @@ def delete_control(device_id, control_id):
     return f"'{name}' deleted.", 200
 
 
-@app.route(
+@bp.route(
     '/devices/<string:device_id>/sensors/<int:sensor_id>', methods=['DELETE'])
 def delete_sensor(device_id, sensor_id):
     device = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
@@ -271,7 +275,7 @@ def delete_sensor(device_id, sensor_id):
     return f"'{name}' deleted.", 200
 
 
-@app.route('/devices/<string:device_id>/scheduler', methods=['POST'])
+@bp.route('/devices/<string:device_id>/scheduler', methods=['POST'])
 def device_run_scheduler(device_id):
     device_db = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
     if CACHE.has_active_scheduler(device_db.uuid):
@@ -279,11 +283,11 @@ def device_run_scheduler(device_id):
     # start up the scheduler for the device
     executor = Scheduler(CACHE.get_active_device(device_db.uuid))
     CACHE.add_scheduler(device_db.uuid, executor)
-    threading.Thread(target=executor.run).start()
+    threading.Thread(target=executor.start).start()
     return f"'{device_db.name}' executor started.", 200
 
 
-@app.route('/cache', methods=['GET'])
+@bp.route('/cache', methods=['GET'])
 def get_cache():
     data = {}
     for d in CACHE.get_all_active_devices():
@@ -294,7 +298,31 @@ def get_cache():
     return jsonify(data), 200
 
 
-@app.route('/devices/scan', methods=['POST'])
+@bp.route('/devices/register', methods=['POST'])
+def register_device():
+    data = request.json
+    if 'url' not in data:
+        return "'url' field needed.", 400
+
+    url = data['url']
+    # todo: sanitize
+    device = WifiDevice(url=url)
+
+    status = device.read_status()
+    if not status.is_success:
+        return f"registered device '{url}' is not responding", 400
+
+    d = Device.from_status_response(device, status.data, create=True)
+    try:
+        db.session.add(d)
+        db.session.commit()
+    except Exception as e:
+        return f"Device registration failed: {e}", 500
+    CACHE.add_active_device(device)
+    return f"Device '{url}' registered", 201
+
+
+@bp.route('/devices/scan', methods=['POST'])
 def scan_devices():
     CACHE.clear_devices()
     found_devices = scan()

@@ -1,5 +1,5 @@
 import uuid
-from hydroserver.device import Device
+from app.device import Device
 
 
 class MockedDevice(Device):
@@ -8,11 +8,22 @@ class MockedDevice(Device):
         self.__uuid = str(uuid.uuid1())
         self.toggle = False
 
+        super().__init__()
+
     def _get_uuid(self):
         return self.__uuid
 
     def _send_raw(self, string):
         return f"status:ok,temp:23.1,hum:50,switch_01:{'1' if self.toggle else '0'}"
+
+    def _init(self):
+        super()._init()
+
+    def _is_connected(self):
+        return True
+
+    def _is_responding(self):
+        return True
 
     def send_control(self, control: str, strict=True):
         self.toggle = not self.toggle

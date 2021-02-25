@@ -3,10 +3,9 @@ import re
 
 from datetime import datetime
 from enum import Enum
-from hydroserver import db
-from hydroserver.device import Device, DeviceException
-from hydroserver.models import Task as TaskDb
-from hydroserver.models import Device as DeviceDb
+from app.device import Device, DeviceException
+from app.models import db, Task as TaskDb
+from app.models import Device as DeviceDb
 
 from croniter import croniter, CroniterNotAlphaError
 

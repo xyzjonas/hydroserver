@@ -1,3 +1,4 @@
+import datetime
 import os
 basedir = os.path.abspath(os.path.dirname(__file__))
 
@@ -9,7 +10,7 @@ class Config(object):
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     DEBUG = True
-    SERIAL_PREFIX = "ttyUSB"
+    SERIAL_PREFIX = "ttyytUSB"
     BAUD_RATE = 19200
     INVERT_BOOLEAN = True  # Python <--> C - boolean inversion
     STATUS_OK = "ok"
@@ -28,32 +29,7 @@ class Config(object):
         "sensor_prefix": "read_"
     }
 
-    # This is what remote device (Arduino) will understand
-    PRECONFIGURED_MAPPINGS = {
-        "sensors": {
-            "temp": {
-                "description": "air temperature",
-                "unit": "°C"
-            },
-            "hum": {
-                "description": "air humidity",
-                "unit": "%"
-            },
-            "water_level": {
-                "description": "water level",
-                "unit": None
-            }
-        },
-        "controls": {
-            "switch_01": {
-                "description": "switch 1"
-            },
-            "switch_02": {
-                "description": "switch 2"
-            },
-            "blink": {
-                "description": "Just a blinking LED"
-            },
-        }
 
-    }
+class TestConfig(Config):
+    TEST = True
+    SQLALCHEMY_DATABASE_URI = "sqlite://"

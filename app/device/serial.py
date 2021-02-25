@@ -1,4 +1,3 @@
-import enum
 import glob
 import logging
 import termios
@@ -7,8 +6,8 @@ import time
 
 from serial import Serial, SerialException
 
-from hydroserver.device import Device, DeviceType, DeviceException
-from hydroserver import Config
+from app.device import Device, DeviceType, DeviceException
+from app import Config
 
 
 log = logging.getLogger(__name__)
@@ -45,13 +44,13 @@ class SerialDevice(Device):
         self.lock = threading.Lock()
         self.serial = None
         self.__uuid = None
-
-        self.__init_serial()
+        super().__init__()
 
     def _get_uuid(self):
         return self.__uuid
 
-    def __init_serial(self):
+    # @Override
+    def _init(self):
         log.info("Initializing {}...".format(self))
         try:
             self.serial = Serial(self.port, self.baud, timeout=self.TIMEOUT)
@@ -70,14 +69,14 @@ class SerialDevice(Device):
             self.serial = None
 
     # [!] one and only send method
-    def __send(self, serial, command, wait_for_response=WAIT_FOR_RESPONSE):
+    def _send_raw(self, command):
         with self.lock:
             try:
-                serial.flush()
+                self.serial.flush()
                 to_write = "{}\n".format(command).encode("utf-8")
-                serial.write(to_write)
-                time.sleep(wait_for_response)
-                response = serial.readline().decode("utf-8").rstrip()
+                self.serial.write(to_write)
+                time.sleep(self.WAIT_FOR_RESPONSE)
+                response = self.serial.readline().decode("utf-8").rstrip()
                 if not response:
                     self.__uuid = None
                     log.warning(
@@ -94,19 +93,11 @@ class SerialDevice(Device):
     def reset_serial(self):
         self.serial = None
 
-    def _send_raw(self, string):
-        if not self.is_connected:
-            log.warning(f"{self} is not connected")
-            self.__init_serial()
-            if not self.serial:
-                log.error(f"{self}: reconnect failed.")
-                return
-
-        return self.__send(self.serial, string)
-
-    @property
-    def is_connected(self):
+    def _is_connected(self):
         return self.serial is not None
+
+    def _is_responding(self):
+        return self.__uuid is not None
 
     def __str__(self):
         return self.__repr__()

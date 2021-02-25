@@ -1,15 +1,15 @@
 import logging
+import pprint
+import threading
 import time
-import traceback
-
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 
-from hydroserver import db, CACHE, Config
-from hydroserver.device import DeviceException
-from hydroserver.device import Device as PhysicalDevice
-from hydroserver.models import Device, Task
-from hydroserver.scheduler.tasks import ScheduledTask, \
+from app import CACHE, Config
+from app.device import Device as PhysicalDevice
+from app.device import DeviceException
+from app.models import db, Device, Task
+from app.scheduler.tasks import ScheduledTask, \
     TaskException, TaskNotCreatedException
 
 log = logging.getLogger(__name__)
@@ -30,20 +30,51 @@ class Scheduler:
         self.executor = ThreadPoolExecutor(max_workers=MAX_WORKERS)
         self.device_uuid = self.device.uuid
         self.__running = False
+        self.__should_be_running = False
+
+        self.__last_executed = set()
 
     def __repr__(self):
         return f"<Scheduler (device={self.device}, running={self.__running})>"
 
-    def run(self):
-        self.__loop()
+    def start(self):
+        if self.is_running:
+            return
+        self.__should_be_running = True
+
+        def try_run():
+            try:
+                self.__loop()
+            except Exception as e:
+                log.fatal(f"{self}: [!!!] scheduler FAILED: \n{e}")
+                self.__running = False
+                self.__should_be_running = False
+
+        t = threading.Thread(target=try_run)
+        t.daemon = True
+        t.start()
+
+    def terminate(self):
+        self.__should_be_running = False
 
     @property
     def is_running(self):
+        return self.__running
+
+    def get_tasks_from_db(self):
+        return self.__load_tasks_from_db(self.device)
+
+    def __execute(self, task):
+        """execute function to be spawned in the thread executor"""
+        self.__last_executed.add(task)
         try:
-            return self.__running
-        except Exception as e:
-            traceback.print_exc(e)
-            self.__running = False
+            log.debug(f"Executing {task} on '{self.device}'")
+            task.runnable.run(self.device)
+            self.__set_task_success(task.task_id)
+            log.debug(f"{task} SUCCESS")
+        except (DeviceException, TaskException) as e:
+            log.debug(f"{task} FAILED")
+            self.__set_task_failed(task.task_id, e)
 
     def __loop(self):
         """
@@ -53,18 +84,18 @@ class Scheduler:
         * execute
         """
         attempts = 0
-        no_task_limit = 0
-        last_executed = set()
+        no_task_retry_limit = 0
         self.__running = True
-        while True:
+        while self.__should_be_running:
             # 1) Health-check
-            if not self.__device_health_check(self.device):
+            if not self.device.health_check():
                 self.__set_is_offline(self.device_uuid)
                 attempts += 1
                 if attempts > RECONNECT_ATTEMPTS:
                     log.warning(f"{self}: device offline, stopping scheduling...")
                     self.executor.shutdown(wait=True)
                     self.__running = False
+                    self.__should_be_running = False
                     CACHE.remove_scheduler(self.device_uuid)
                     return
                 to_be_scheduled = set()
@@ -72,38 +103,32 @@ class Scheduler:
                             f"(attempts={attempts}/{RECONNECT_ATTEMPTS}).")
             else:
                 attempts = 0
-                to_be_scheduled = {
-                    self.__sanitize_task_input(t)
-                    for t in self.__load_tasks_from_db(self.device)
-                }.difference(last_executed)
-                to_be_scheduled = {t for t in to_be_scheduled if t}
+                to_be_scheduled = self.__load_tasks_from_db(self.device) \
+                    .difference(self.__last_executed)
 
             # 2) handle tasks
             active_tasks = sorted(to_be_scheduled, key=lambda t: t.scheduled_time)
-            log.debug(f"{self}: {len(active_tasks)} active tasks: {active_tasks}")
-            if active_tasks:
-                no_task_limit = 0
-                up_next = active_tasks[0]
-
-                # figure out the execution time and delta
-                scheduled_time = up_next.scheduled_time
-                time_to_next = scheduled_time - datetime.utcnow()
-
-                log.debug(f"{self}: up next: id={up_next.task_id}, "
-                          f"at {scheduled_time} (i.e. in {time_to_next})")
+            log.debug(f"{self}: {len(active_tasks)} active tasks: \n"
+                      f"{pprint.pformat(active_tasks)}")
+            for task in active_tasks:
+                time_to_next = task.scheduled_time - datetime.utcnow()
                 # if inside the 'safe interval' execute right away and don't wait
                 if time_to_next <= timedelta(seconds=SAFE_INTERVAL):
-                    try:
-                        up_next.runnable.run(self.device)
-                        self.__set_task_success(up_next.task_id)
-                    except (DeviceException, TaskException) as e:
-                        self.__set_task_failed(up_next.task_id, e)
-                    last_executed.add(up_next)
-                    time_to_next = timedelta(milliseconds=1)
+                    self.executor.submit(self.__execute, task)
+
+            active_tasks = to_be_scheduled.difference(self.__last_executed)
+            active_tasks = sorted(active_tasks, key=lambda t: t.scheduled_time)
+
+            if active_tasks:
+                up_next = active_tasks[0]
+                time_to_next = up_next.scheduled_time - datetime.utcnow()
+                log.debug(f"Up-next: {up_next}, i.e. in {up_next.scheduled_time - datetime.utcnow()}")
             else:
+                # 3) auto-stop in case of no tasks
+                # fixme: necessary?
                 time_to_next = timedelta(seconds=IDLE_INTERVAL_SECONDS)
-                no_task_limit += 1
-                if no_task_limit > RECONNECT_ATTEMPTS:
+                no_task_retry_limit += 1
+                if no_task_retry_limit > RECONNECT_ATTEMPTS:
                     log.warning(f"{self}: no tasks received for quite some "
                                 "time, stopping scheduling...")
                     self.executor.shutdown(wait=True)
@@ -114,47 +139,30 @@ class Scheduler:
             # 3) Time delta shenanigans
             if not time_to_next or time_to_next.seconds >= IDLE_INTERVAL_SECONDS:
                 time_to_next = timedelta(seconds=IDLE_INTERVAL_SECONDS)
-                last_executed.clear()  # CLEANUP - prevent memory leak
-
-            if time_to_next < timedelta(seconds=SAFE_INTERVAL):
-                time_to_next = timedelta(milliseconds=10)
-            else:
-                time_to_next = time_to_next - timedelta(seconds=SAFE_INTERVAL / 2)
+                self.__last_executed.clear()  # CLEANUP - prevent memory leak
 
             # 4) Obligatory sleep
             log.debug(f"{self}: sleeping for {time_to_next.total_seconds()}")
-            time.sleep(time_to_next.total_seconds())
+            sleep_secs = time_to_next.total_seconds() - SAFE_INTERVAL
+            time.sleep(sleep_secs if sleep_secs > 0 else 0.01)
 
-    @staticmethod
-    def __device_health_check(device):
-        if device.is_responding:
-            return True
-        log.info(f"{device} is offline, checking if something changed...")
-
-        try:
-            device.read_status()
-        except DeviceException as e:
-            log.error(f"Status failed: {e}")
-            return False
-
-        if device.is_responding:
-            return True
-        return False
-
-    @staticmethod
-    def __sanitize_task_input(task):
-        try:
-            return ScheduledTask.from_db_object(task)
-        except TaskNotCreatedException as e:
-            task.last_run = datetime.utcnow()
-            task.last_run_success = False
-            task.last_run_error = str(e)
-            db.session.commit()
+        # end WHILE
+        log.info(f"{self} exiting...")
+        self.__running = False
 
     @staticmethod
     def __load_tasks_from_db(serial_device):
+        def __sanitize(task):
+            try:
+                return ScheduledTask.from_db_object(task)
+            except TaskNotCreatedException as e:
+                task.last_run = datetime.utcnow()
+                task.last_run_success = False
+                task.last_run_error = str(e)
+                db.session.commit()
+
         device = Device.query_by_serial_device(serial_device)
-        return [t for t in device.tasks]
+        return {task for task in [__sanitize(t) for t in device.tasks] if task}
 
     @staticmethod
     def __set_is_offline(device_uuid):

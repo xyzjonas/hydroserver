@@ -1,7 +1,7 @@
 import logging
 from enum import Enum
 
-from hydroserver import Config
+from app import Config
 
 
 log = logging.getLogger(__name__)
@@ -57,8 +57,7 @@ class DeviceResponse:
     @classmethod
     def from_response_data(cls, data, extract_field=None):
         if data.get("status"):
-            status = Status.from_string(data.get("status"))
-            del data["status"]
+            status = Status.from_string(data.pop("status"))
         else:
             raise DeviceException(
                 f"Response '{data or None}' does not contain 'status' field.")
@@ -73,8 +72,20 @@ class DeviceResponse:
 
 
 class Device:
+    """
+    To implement:
+
+    * _send_raw (I/O)
+    * unique id getter
+    * initialization routine
+    * is_connected/is_responding behaviour
+    * device_type
+    """
 
     device_type = DeviceType.GENERIC
+
+    def __init__(self):
+        self._init()
 
     def __repr__(self):
         return f"<{self.__class__.__name__} (type={self.device_type.value})>"
@@ -82,29 +93,59 @@ class Device:
     # to be overridden
     def _send_raw(self, string):
         """
-        Per device type implementation
-        :param string: raw string to be sent
+        Per device type send/receive implementation.
+        (!) responsible for changing device state in case of connection issues.
+
+        :param str string: raw string to be sent
+        :return: raw string (decoded) response
         :rtype: str
         """
         pass
 
+    # to be overridden
     def _get_uuid(self):
+        """UUID getter"""
+        pass
+
+    # to be overridden
+    def _init(self):
+        """Initialization method -> fetch status and make device responding"""
+        pass
+
+    # to be overridden
+    def _is_connected(self):
+        """Device is sending/receiving'"""
+        pass
+
+    # to be overridden
+    def _is_responding(self):
+        """Device is sending/receiving according to 'protocol'"""
         pass
 
     @property
-    def is_connected(self):
-        return False
+    def is_responding(self):
+        return self._is_responding() and self._is_connected()
 
     @property
-    def is_responding(self):
-        return self.uuid is not None
-    # END
+    def is_connected(self):
+        return self._is_connected()
 
     @property
     def uuid(self):
         return self._get_uuid()
 
-    def send_command(self, *args, separator=""):
+    def ensure_connectivity(self):
+        """If device is not responding, try to initialize it."""
+        if not self.is_responding:
+            log.warning(f"{self} is not connected")
+            self.read_status()
+            if not self.is_responding:
+                log.error(f"{self}: reconnect failed: "
+                          f"{self.is_connected=}, {self.is_responding=}")
+                return False
+        return True
+
+    def send_command(self, *args, separator="", retries=2):
         """
         SEND a generic string command
         :rtype: dict
@@ -112,6 +153,15 @@ class Device:
         cmd = separator.join(args)
         log.debug(f"{self}: sending command '{cmd}'")
         data = self._parse_response(self._send_raw(cmd))
+
+        # retry
+        if not data:
+            for i in range(retries):
+                if self.ensure_connectivity():
+                    data = self._parse_response(self._send_raw(cmd))
+                    if data:
+                        break
+
         log.debug(f"{self}: received '{data}'")
         return data
 
@@ -142,8 +192,9 @@ class Device:
                 f"{self}: '{sensor}' sensor read failed '{response}'")
 
         try:
+            # fixme: response TYPES!
             response.data = float(response.data)
-        except TypeError:
+        except (TypeError, ValueError):
             if strict:
                 raise DeviceException(
                     f"{self}: received value '{response.data}' is not a number")
@@ -162,14 +213,24 @@ class Device:
             raise DeviceException(
                 f"{self}: '{control}' control failed '{response}'")
 
-        if not response.data and strict:
-            raise DeviceException(
-                f"{self}: no response value '{response}'")
-
-        response.data = float(response.data)
-        if Config.INVERT_BOOLEAN:
-            response.data = not float(response.data)
+        if response.data is None and strict:
+            raise DeviceException(f"{self}: no response value '{response}'")
         return response
+
+    def health_check(self):
+        if self.is_responding:
+            return True
+        log.info(f"{self} is offline, checking if something changed...")
+
+        try:
+            self.read_status()
+        except DeviceException as e:
+            log.error(f"Status failed: {e}")
+            return False
+
+        if self.is_responding:
+            return True
+        return False
 
     @staticmethod
     def _parse_response(response_string):
@@ -187,14 +248,14 @@ class Device:
         return data
 
 
-from hydroserver.device.serial import scan as serial_scan
-from hydroserver.device.mock import scan as mock_scan
+from app.device.serial import scan as serial_scan
+from app.device.mock import scan as mock_scan
 
 
 def scan():
     import os
     try:
-        mocked_devices = os.getenv("MOCK_DEV", "0")
+        mocked_devices = os.getenv("MOCK_DEV", "1")
         mocked_devices = int(mocked_devices)
     except Exception:
         mocked_devices = 0

@@ -28,7 +28,8 @@ class Cache:
             self.__active_devices.clear()
 
     def has_active_scheduler(self, uuid):
-        return self.__active_schedulers.get(uuid) is not None
+        return self.__active_schedulers.get(uuid) is not None \
+               and self.__active_schedulers.get(uuid).is_running
 
     def get_active_scheduler(self, uuid):
         if self.has_active_scheduler(uuid):

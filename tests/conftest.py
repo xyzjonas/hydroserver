@@ -6,8 +6,9 @@ from app.config import TestConfig
 
 @pytest.fixture(scope="session", autouse=True)
 def app_setup():
-    create_app(TestConfig)
+    application = create_app(TestConfig)
     db.drop_all()
+    return application
 
 
 @pytest.fixture()
@@ -15,6 +16,7 @@ def setup():
     db.create_all()
     yield
     db.drop_all()
+    db.session.remove()
 
 
 @pytest.fixture()

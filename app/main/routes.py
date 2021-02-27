@@ -38,6 +38,17 @@ def get_device(device_id):
     return jsonify(d.dictionary)
 
 
+@bp.route('/devices/<int:device_id>', methods=['DELETE'])
+def delete_device(device_id):
+    d = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
+    try:
+        db.session.delete(d)
+        db.session.commit()
+    except Exception as e:
+        return f"Delete failed '{e}'", 500
+    return f"device '{device_id}' deleted.", 200
+
+
 @bp.route('/devices/<int:device_id>/sensors', methods=['GET'])
 def get_device_sensors(device_id):
     d = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
@@ -301,18 +312,17 @@ def get_cache():
 @bp.route('/devices/register', methods=['POST'])
 def register_device():
     data = request.json
-    if 'url' not in data:
+    if not data or 'url' not in data:
         return "'url' field needed.", 400
 
     url = data['url']
     # todo: sanitize
     device = WifiDevice(url=url)
 
-    status = device.read_status()
-    if not status.is_success:
+    if not device.is_site_online():
         return f"registered device '{url}' is not responding", 400
 
-    d = Device.from_status_response(device, status.data, create=True)
+    d = Device.from_status_response(device, device.read_status().data, create=True)
     try:
         db.session.add(d)
         db.session.commit()

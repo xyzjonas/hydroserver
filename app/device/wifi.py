@@ -38,14 +38,21 @@ class WifiDevice(Device):
 
     def is_site_online(self):
         """A basic Wifi device is realized as a HTTP server accepting GET on '/'"""
-        return not requests.get(self.url).status_code >= 300
+        try:
+            return not requests.get(self.url).status_code >= 300
+        except requests.RequestException:
+            return False
 
     # [!] one and only send method
     def _send_raw(self, string):
         data = {
             'request': string
         }
-        response = requests.post(self.url, json=data)
+        try:
+            response = requests.post(self.url, json=data)
+        except requests.RequestException:
+            self.__uuid = None
+            return None
         # todo: error state (better)
         if response.status_code >= 300:
             self.__uuid = None

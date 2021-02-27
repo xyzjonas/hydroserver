@@ -120,6 +120,7 @@ class Scheduler:
             active_tasks = sorted(active_tasks, key=lambda t: t.scheduled_time)
 
             if active_tasks:
+                no_task_retry_limit = 0
                 up_next = active_tasks[0]
                 time_to_next = up_next.scheduled_time - datetime.utcnow()
                 log.debug(f"Up-next: {up_next}, i.e. in {up_next.scheduled_time - datetime.utcnow()}")

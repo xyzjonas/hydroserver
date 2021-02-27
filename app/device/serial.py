@@ -6,7 +6,7 @@ import time
 
 from serial import Serial, SerialException
 
-from app.device import Device, DeviceType, DeviceException
+from app.device import Device, DeviceType, DeviceException, Command
 from app import Config
 
 
@@ -56,7 +56,7 @@ class SerialDevice(Device):
             self.serial = Serial(self.port, self.baud, timeout=self.TIMEOUT)
             time.sleep(2)  # fixme: serial takes time to be ready to receive
 
-            device_info = self.read_status()
+            device_info = self._send_raw(Command.STATUS.value)
             if device_info:
                 if "uuid" in device_info.data.keys():
                     self.__uuid = device_info.data['uuid']
@@ -64,12 +64,14 @@ class SerialDevice(Device):
                     log.warning("Device info received, but without UUID field")
             else:
                 log.warning("Device info not received.")
-        except (FileNotFoundError, SerialException) as e:
+        except (FileNotFoundError, SerialException, ValueError) as e:
             log.error("Failed to open serial connection: {}".format(e))
             self.serial = None
 
     # [!] one and only send method
     def _send_raw(self, command):
+        if not self.serial:
+            return
         with self.lock:
             try:
                 self.serial.flush()
@@ -83,8 +85,9 @@ class SerialDevice(Device):
                         "{}: response for '{}' not received..".format(self, command))
                 return response
             except SerialException as e:
-                log.warning(e.strerror)
+                log.warning(e)
                 self.__uuid = None
+                self.serial = None
             except termios.error as e:
                 log.fatal("{}: device got probably disconnected".format(e))
                 self.__uuid = None

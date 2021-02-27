@@ -27,6 +27,7 @@ class DeviceType(Enum):
 class Status(Enum):
     OK = Config.STATUS_OK
     FAIL = Config.STATUS_FAIL
+    NO_DATA = "NO_DATA"
 
     @classmethod
     def from_string(cls, string):
@@ -138,19 +139,19 @@ class Device:
         """If device is not responding, try to initialize it."""
         if not self.is_responding:
             log.warning(f"{self} is not connected")
-            self.read_status()
+            self._parse_response(self._send_raw(Command.STATUS.value))
             if not self.is_responding:
                 log.error(f"{self}: reconnect failed: "
                           f"connected={self.is_connected}, responding={self.is_responding}")
                 return False
         return True
 
-    def send_command(self, *args, separator="", retries=2):
+    def send_command(self, command, retries=2):
         """
         SEND a generic string command
         :rtype: dict
         """
-        cmd = separator.join(args)
+        cmd = str(command)
         log.debug(f"{self}: sending command '{cmd}'")
         data = self._parse_response(self._send_raw(cmd))
 
@@ -184,8 +185,9 @@ class Device:
         READ a sensor value and return number
         :rtype: DeviceResponse
         """
+        cmd = "_".join([Command.SENSOR.value, sensor])
         response = DeviceResponse.from_response_data(
-            self.send_command(Command.SENSOR.value, sensor), extract_field=sensor)
+            self.send_command(cmd), extract_field=sensor)
 
         if not response.is_success and strict:
             raise DeviceException(

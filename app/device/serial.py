@@ -56,10 +56,11 @@ class SerialDevice(Device):
             self.serial = Serial(self.port, self.baud, timeout=self.TIMEOUT)
             time.sleep(2)  # fixme: serial takes time to be ready to receive
 
-            device_info = self._send_raw(Command.STATUS.value)
+            device_info = self._parse_response(
+                self._send_raw(Command.STATUS.value))
             if device_info:
-                if "uuid" in device_info.data.keys():
-                    self.__uuid = device_info.data['uuid']
+                if "uuid" in device_info:
+                    self.__uuid = device_info['uuid']
                 else:
                     log.warning("Device info received, but without UUID field")
             else:

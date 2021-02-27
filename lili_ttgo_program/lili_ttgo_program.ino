@@ -1,36 +1,7 @@
-/*
-   Copyright (c) 2015, Majenko Technologies
-   All rights reserved.
-
-   Redistribution and use in source and binary forms, with or without modification,
-   are permitted provided that the following conditions are met:
-
- * * Redistributions of source code must retain the above copyright notice, this
-     list of conditions and the following disclaimer.
-
- * * Redistributions in binary form must reproduce the above copyright notice, this
-     list of conditions and the following disclaimer in the documentation and/or
-     other materials provided with the distribution.
-
- * * Neither the name of Majenko Technologies nor the names of its
-     contributors may be used to endorse or promote products derived from
-     this software without specific prior written permission.
-
-   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-   ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-   WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-   DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
-   ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-   (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-   LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
-   ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-*/
-
 #include "NotoSansBold15.h"
 #define AA_FONT_SMALL NotoSansBold15
 #define GREEN 0x52B788
+#define HUB "http://www.hydroserverrr.home/rest/devices/register"
 
 #include <SPI.h>
 #include <TFT_eSPI.h>       // Hardware-specific library
@@ -41,10 +12,12 @@ TFT_eSPI tft = TFT_eSPI();
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <WebServer.h>
+#include <HTTPClient.h>
 //#include <ESPmDNS.h>
 
 const char *ssid = "Darebaci";
 const char *password = "123456789Ab";
+String uuid;
 
 WebServer server(80);
 
@@ -52,31 +25,10 @@ const int led = 13;
 
 void handleRoot() {
   digitalWrite(led, 1);
-  char temp[400];
-  int sec = millis() / 1000;
-  int min = sec / 60;
-  int hr = min / 60;
+  String response = "{\"status\":\"ok\", \"temp\":\"15\",";
+  response += "\"uuid\": \"" + uuid + "\"}";
 
-  snprintf(temp, 400,
-
-           "<html>\
-  <head>\
-    <meta http-equiv='refresh' content='5'/>\
-    <title>ESP32 Demo</title>\
-    <style>\
-      body { background-color: #cccccc; font-family: Arial, Helvetica, Sans-Serif; Color: #000088; }\
-    </style>\
-  </head>\
-  <body>\
-    <h1>Hello from ESP32!</h1>\
-    <p>Uptime: %02d:%02d:%02d</p>\
-    <img src=\"/test.svg\" />\
-  </body>\
-</html>",
-
-           hr, min % 60, sec % 60
-          );
-  server.send(200, "text/html", temp);
+  server.send(200, "application/json", response);
   digitalWrite(led, 0);
 }
 
@@ -100,20 +52,21 @@ void handleNotFound() {
 }
 
 void setup(void) {
+  uuid = String((int) ESP.getEfuseMac(), HEX);
+
   tft.begin();
   tft.setRotation(0);
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
   tft.setCursor(0, 0);
   tft.loadFont(AA_FONT_SMALL);
-  
+
   pinMode(led, OUTPUT);
   digitalWrite(led, 0);
   Serial.begin(115200);
-  
+
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
-  Serial.println("");
 
   // Wait for connection
   while (WiFi.status() != WL_CONNECTED) {
@@ -121,7 +74,8 @@ void setup(void) {
     tft.print(".");
   }
 
-  Serial.println("");
+  tft.println(uuid);
+  tft.println();
   tft.println("Connected to:");
   tft.setTextColor(GREEN, TFT_BLACK);
   tft.println(ssid);
@@ -136,6 +90,26 @@ void setup(void) {
   server.begin();
   tft.println();
   tft.println("HTTP started");
+
+  HTTPClient http;
+  http.begin(HUB);
+  String httpData = "{\"url\":\"http://";
+  httpData += WiFi.localIP().toString();
+  httpData += "\"}";
+  http.addHeader("Content-Type", "application/json");
+  tft.println(httpData);
+  int responseCode = http.POST(httpData);
+  tft.println(responseCode);
+  if (responseCode > 0) {
+    tft.setTextColor(GREEN, TFT_BLACK);
+    tft.println("REGISTRED");
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  } else {
+    tft.setTextColor(TFT_RED, TFT_BLACK);
+    tft.println("NOT REGISTRED");
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  }
+
 }
 
 void loop(void) {

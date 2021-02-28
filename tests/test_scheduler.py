@@ -9,7 +9,7 @@ from app.scheduler.tasks import TaskType
 
 
 @pytest.fixture()
-def device(setup):
+def device(db_setup):
     d = MockedDevice()
     init_device(d)
 

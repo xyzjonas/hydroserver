@@ -5,7 +5,7 @@ from app import db, create_app
 
 
 @pytest.fixture()
-def task(setup):
+def task(db_setup):
     device = Device(name="test_device")
     task = Task(device=device)
     db.session.add(task)
@@ -15,7 +15,7 @@ def task(setup):
     db.session.commit()
 
 
-def test_empty_db(setup):
+def test_empty_db(db_setup):
     assert not Device.query.all()
 
 

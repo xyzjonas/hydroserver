@@ -185,7 +185,7 @@ class Device:
         READ a sensor value and return number
         :rtype: DeviceResponse
         """
-        cmd = "_".join([Command.SENSOR.value, sensor])
+        cmd = f"{Command.SENSOR.value}{sensor}"
         response = DeviceResponse.from_response_data(
             self.send_command(cmd), extract_field=sensor)
 
@@ -208,8 +208,9 @@ class Device:
         SEND a control command
         :rtype: DeviceResponse
         """
+        cmd = f"{Command.CONTROL.value}{control}"
         response = DeviceResponse.from_response_data(
-            self.send_command(Command.CONTROL.value, control), extract_field=control)
+            self.send_command(cmd), extract_field=control)
 
         if not response.is_success and strict:
             raise DeviceException(

@@ -1,9 +1,12 @@
+import mock
 import pytest
-from mock import patch
 
-from app.device import DeviceException
-from app.device.wifi import WifiDevice
+from app import init_device
+from app.device import mock
+from app.models import Device
+from app.device import DeviceException, DeviceResponse
 from app.device.serial import SerialDevice
+from app.device.wifi import WifiDevice
 
 
 DEVICES = [
@@ -13,16 +16,10 @@ DEVICES = [
 DEVICES_IDS = ["wifi", "serial"]
 
 
-@pytest.mark.parametrize("url", [
-    None,
-    "asdad&@*!HADK@&AHD@*QY",
-    "http://invalid_url/but/still/url"
-])
-def test_wifi_init_invalid_url(url):
-    device = WifiDevice(url)
-    assert not device.is_site_online()
-    assert not device.is_connected
-    assert not device.is_responding
+def test_init_device(db_setup):
+    d = mock.MockedDevice()
+    assert init_device(d)
+    assert Device.query_by_serial_device(d)
 
 
 @pytest.mark.parametrize("baud", [None, 19200])
@@ -50,7 +47,7 @@ def test_send_command_negative(device, command):
 def test_reconnect(mocked_device):
     assert mocked_device.read_status()
 
-    with patch.object(mocked_device, "send_command", return_value={}):
+    with mock.patch.object(mocked_device, "send_command", return_value={}):
         assert mocked_device.send_command("cmd") == {}
         with pytest.raises(DeviceException):
             mocked_device.read_status()
@@ -58,3 +55,25 @@ def test_reconnect(mocked_device):
 
     assert mocked_device.read_status()
     assert mocked_device.is_responding
+
+
+@pytest.mark.parametrize("data", [None, "", 123, {}])
+def test_parse_device_response_empty(data):
+    with pytest.raises(DeviceException, match="does not contain 'status' field"):
+        DeviceResponse.from_response_data(data=data)
+
+
+@pytest.mark.parametrize("data", [
+    {"status": ""},
+    {"status": None},
+    {"status": 123},
+    {"status": "error"},
+])
+def test_parse_device_response_nok(data):
+    res = DeviceResponse.from_response_data(data=data)
+    assert not res.is_success
+
+
+def test_parse_device_response_ok():
+    res = DeviceResponse.from_response_data(data={"status": "ok"})
+    assert res.is_success

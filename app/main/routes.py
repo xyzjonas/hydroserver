@@ -78,7 +78,6 @@ def get_device_controls(device_id):
 
 @bp.route('/devices/<int:device_id>/controls/<int:control_id>', methods=['POST'])
 def post_device_control(device_id, control_id):
-    # todo: (!) active device keeps adding new controls/sensors if e.g. renamed
     c = Control.query.filter_by(id=_get_id(control_id)).first_or_404()
     data = request.json
     if not data:
@@ -122,7 +121,7 @@ def post_device_tasks(device_id):
     if "id" in data:
         task = Task.query.filter_by(id=data["id"]).first()
         if not task:
-            return f"No such task for device {device.name}", 400
+            return f"No such task '{data['id']}'for device {device.name}", 400
     else:
         task = Task(device=device)
         created = True
@@ -164,9 +163,9 @@ def post_device_tasks(device_id):
     db.session.add(task)
     db.session.commit()
 
-    if created and len(Task.query.all()) == 1:
+    if created:
         # start up the scheduler for the device
-        executor = Scheduler(CACHE.get_active_device(device.uuid))
+        executor = Scheduler(CACHE.get_active_device_by_uuid(device.uuid))
         CACHE.add_scheduler(device.uuid, executor)
         threading.Thread(target=executor.start).start()
 
@@ -210,7 +209,7 @@ def device_action(device_id):
 
     # command = f"action_{control.name}"
 
-    device = CACHE.get_active_device(device_db.uuid)
+    device = CACHE.get_active_device_by_uuid(device_db.uuid)
     if not device:
         return f"{device_db.name} not connected", 503
 
@@ -292,7 +291,7 @@ def device_run_scheduler(device_id):
     if CACHE.has_active_scheduler(device_db.uuid):
         return f"'{device_db.name}' has already an active executor.", 200
     # start up the scheduler for the device
-    executor = Scheduler(CACHE.get_active_device(device_db.uuid))
+    executor = Scheduler(CACHE.get_active_device_by_uuid(device_db.uuid))
     CACHE.add_scheduler(device_db.uuid, executor)
     threading.Thread(target=executor.start).start()
     return f"'{device_db.name}' executor started.", 200
@@ -316,14 +315,14 @@ def register_device():
         return "'url' field needed.", 400
 
     url = data['url']
-    # todo: sanitize
     device = WifiDevice(url=url)
 
     if not device.is_site_online():
-        return f"registered device '{url}' is not responding", 400
-
-    d = Device.from_status_response(device, device.read_status().data, create=True)
+        return f"Device '{url}' is not responding.", 400
     try:
+        status = device.read_status()
+        d = Device.from_status_response(device, status.data, create=True)
+
         db.session.add(d)
         db.session.commit()
     except Exception as e:

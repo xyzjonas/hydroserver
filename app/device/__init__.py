@@ -57,9 +57,9 @@ class DeviceResponse:
 
     @classmethod
     def from_response_data(cls, data, extract_field=None):
-        if data.get("status"):
+        try:
             status = Status.from_string(data.pop("status"))
-        else:
+        except (KeyError, AttributeError):
             raise DeviceException(
                 f"Response '{data or None}' does not contain 'status' field.")
 
@@ -109,6 +109,11 @@ class Device:
         pass
 
     # to be overridden
+    def _get_url(self):
+        """URL getter"""
+        pass
+
+    # to be overridden
     def _init(self):
         """Initialization method -> fetch status and make device responding"""
         pass
@@ -134,6 +139,10 @@ class Device:
     @property
     def uuid(self):
         return self._get_uuid()
+
+    @property
+    def url(self):
+        return self._get_url()
 
     def ensure_connectivity(self):
         """If device is not responding, try to initialize it."""
@@ -247,6 +256,10 @@ class Device:
                 if len(item.split(":")) != 2:
                     continue
                 key, value = item.split(":")
+                if not key:
+                    continue
+                if not value:
+                    value = None
                 data[key] = value
         return data
 

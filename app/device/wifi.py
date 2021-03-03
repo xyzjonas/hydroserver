@@ -2,7 +2,7 @@ import logging
 import threading
 import requests
 
-from app.device import Device, DeviceType
+from app.device import Device, DeviceType, Command
 
 
 log = logging.getLogger(__name__)
@@ -13,7 +13,7 @@ class WifiDevice(Device):
     device_type = DeviceType.WIFI
 
     def __init__(self, url):
-        self.url = url
+        self.__url = url
         self.lock = threading.Lock()
         self.__uuid = None
         super().__init__()
@@ -21,11 +21,15 @@ class WifiDevice(Device):
     def _get_uuid(self):
         return self.__uuid
 
+    def _get_url(self):
+        return self.__url
+
     def _init(self):
         if not self.is_site_online():
             self.__uuid = None
             return
-        response = self.send_command('status')
+        response = self._parse_response(
+            self._send_raw(Command.STATUS.value))
         if not response:
             self.__uuid = None
             return
@@ -53,7 +57,6 @@ class WifiDevice(Device):
         except requests.RequestException:
             self.__uuid = None
             return None
-        # todo: error state (better)
         if response.status_code >= 300:
             self.__uuid = None
 
@@ -66,13 +69,4 @@ class WifiDevice(Device):
     def _is_responding(self):
         return self.__uuid is not None
 
-    @classmethod
-    def from_url(cls, url):
-        """Create a device from URL - by fetching its status"""
-        device = WifiDevice(url=url)
-        response = device.read_status()
-        if response.is_success:
-            if response.data.get('uuid'):
-                device.__uuid = response.data.get('uuid')
-                return device
 

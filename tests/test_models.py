@@ -27,6 +27,12 @@ def test_task_metadata(task):
     assert not task.task_metadata
 
 
+@pytest.mark.parametrize("meta", [None, "", {123, 123}])
+def test_task_metadata_negative(task, meta):
+    task.task_metadata = meta
+    assert task.task_metadata == {}
+
+
 def test_dictionary(task):
     """
         @property

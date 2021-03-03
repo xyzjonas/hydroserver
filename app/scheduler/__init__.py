@@ -7,8 +7,7 @@ from datetime import datetime, timedelta
 
 from app import CACHE, Config
 from app.device import Device as PhysicalDevice
-from app.device import DeviceException
-from app.models import db, Device, Task
+from app.models import db, Device
 from app.scheduler.tasks import ScheduledTask, \
     TaskException, TaskNotCreatedException
 
@@ -67,14 +66,7 @@ class Scheduler:
     def __execute(self, task):
         """execute function to be spawned in the thread executor"""
         self.__last_executed.add(task)
-        try:
-            log.debug(f"Executing {task} on '{self.device}'")
-            task.runnable.run(self.device)
-            self.__set_task_success(task.task_id)
-            log.debug(f"{task} SUCCESS")
-        except (DeviceException, TaskException) as e:
-            log.debug(f"{task} FAILED")
-            self.__set_task_failed(task.task_id, e)
+        task.runnable.run(self.device)
 
     def __loop(self):
         """
@@ -88,7 +80,7 @@ class Scheduler:
         self.__running = True
         while self.__should_be_running:
             # 1) Health-check
-            if not self.device.health_check():
+            if not self.device.is_responding:
                 self.__set_is_offline(self.device_uuid)
                 attempts += 1
                 if attempts > RECONNECT_ATTEMPTS:
@@ -126,7 +118,6 @@ class Scheduler:
                 log.debug(f"Up-next: {up_next}, i.e. in {up_next.scheduled_time - datetime.utcnow()}")
             else:
                 # 3) auto-stop in case of no tasks
-                # fixme: necessary?
                 time_to_next = timedelta(seconds=IDLE_INTERVAL_SECONDS)
                 no_task_retry_limit += 1
                 if no_task_retry_limit > RECONNECT_ATTEMPTS:
@@ -170,22 +161,4 @@ class Scheduler:
         d = Device.query.filter_by(uuid=device_uuid).first()
         if d:
             d.is_online = False
-            db.session.commit()
-
-    @staticmethod
-    def __set_task_success(task_id):
-        t = Task.query.filter_by(id=task_id).first()
-        if t:
-            t.last_run = datetime.utcnow()
-            t.last_run_success = True
-            t.last_run_error = None
-            db.session.commit()
-
-    @staticmethod
-    def __set_task_failed(task_id, exception):
-        t = Task.query.filter_by(id=task_id).first()
-        if t:
-            t.last_run = datetime.utcnow()
-            t.last_run_success = False
-            t.last_run_error = str(exception)
             db.session.commit()

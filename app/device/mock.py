@@ -25,6 +25,9 @@ class MockedDevice(Device):
     def _is_responding(self):
         return True
 
+    def _get_url(self):
+        return f"mocked://{self.uuid}"
+
     def send_control(self, control: str, strict=True):
         self.toggle = not self.toggle
         return super().send_control(control, strict)

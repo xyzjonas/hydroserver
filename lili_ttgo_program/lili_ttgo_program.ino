@@ -1,54 +1,116 @@
+#include <Arduino_JSON.h>
+
 #include "NotoSansBold15.h"
 #define AA_FONT_SMALL NotoSansBold15
 #define GREEN 0x52B788
-#define HUB "http://www.hydroserverrr.home/rest/devices/register"
+#define HUB "http://www.hydroserver.home/rest/devices/register"
 
 #include <SPI.h>
 #include <TFT_eSPI.h>       // Hardware-specific library
-
-TFT_eSPI tft = TFT_eSPI();
-
-
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <WebServer.h>
 #include <HTTPClient.h>
-//#include <ESPmDNS.h>
+
+
+// Available physical pins
+#define RELE_01 2
+#define RELE_02 10
+#define WATER_PIN 15
+
+// Available items
+#define SWITCH1 "switch_01"
+#define SWITCH2 "switch_02"
+#define WATER "water_level"
+
 
 const char *ssid = "Darebaci";
 const char *password = "123456789Ab";
 String uuid;
 
 WebServer server(80);
+TFT_eSPI tft = TFT_eSPI();
 
 const int led = 13;
 
-void handleRoot() {
-  digitalWrite(led, 1);
-  String response = "{\"status\":\"ok\", \"temp\":\"15\",";
-  response += "\"uuid\": \"" + uuid + "\"}";
-
-  server.send(200, "application/json", response);
-  digitalWrite(led, 0);
+bool readPin(int PIN) {
+  return digitalRead(PIN);
 }
 
-void handleNotFound() {
-  digitalWrite(led, 1);
-  String message = "File Not Found\n\n";
-  message += "URI: ";
-  message += server.uri();
-  message += "\nMethod: ";
-  message += (server.method() == HTTP_GET) ? "GET" : "POST";
-  message += "\nArguments: ";
-  message += server.args();
-  message += "\n";
+String getUuid() {
+  return String((int) ESP.getEfuseMac(), HEX);
+}
 
-  for (uint8_t i = 0; i < server.args(); i++) {
-    message += " " + server.argName(i) + ": " + server.arg(i) + "\n";
+
+void toggleSwitch(int PIN) {
+  if (readPin(PIN)) {
+    digitalWrite(PIN, LOW);
+  } else {
+    digitalWrite(PIN, HIGH);
+  }
+}
+
+void handleStatus() {
+  JSONVar response;
+  response["status"] = "ok";
+  response["temp"] = 15;
+  response["uuid"] = getUuid();
+  response[SWITCH1] = readPin(RELE_01);
+  response[SWITCH2] = readPin(RELE_02);
+  response[WATER] = readPin(WATER_PIN);
+  server.send(200, "application/json", JSON.stringify(response));
+}
+
+void handleAction() {
+  String body = server.arg("plain");
+  JSONVar myObject = JSON.parse(body);
+
+  if (JSON.typeof(myObject) == "undefined") {
+    handleError("Parsing JSON failed.");
+    return;
+  }
+  if (!myObject.hasOwnProperty("request")) {
+    handleError("JSON needs to have exactly one keyword <request>");
+    return;
   }
 
-  server.send(404, "text/plain", message);
-  digitalWrite(led, 0);
+  String read_prefix = "read_";
+  String action = "action_";
+  String request = (const char*) myObject["request"];
+  if (request == "status") {
+     handleStatus();
+     return;
+  }
+
+  JSONVar response;
+  if (request == "info") {
+    response["uuid"]= getUuid();
+  } else if (request == action + SWITCH1) {
+    toggleSwitch(RELE_01);
+    response[SWITCH1] = readPin(RELE_01);
+  } else if (request == action + SWITCH2) {
+    toggleSwitch(RELE_02);
+    response[SWITCH2] = readPin(RELE_02);
+  } else if (request == read_prefix + WATER) {
+    toggleSwitch(RELE_02);
+    response[WATER] = readPin(WATER_PIN);
+  } else {
+    handleError("UNKNOWN_CMD " + request);
+    return;
+  }
+  response["status"] = "ok";
+  server.send(200, "application/json", JSON.stringify(response));
+}
+
+void handleError(String msg) {
+  
+  JSONVar message;
+  message["uri"] = server.uri();
+  message["method"] = (server.method() == HTTP_GET) ? "GET" : "POST";
+  message["arguments"] = server.args();
+  message["cause"] = msg;
+
+  server.send(400, "application/json", JSON.stringify(message));
 }
 
 void setup(void) {
@@ -63,7 +125,6 @@ void setup(void) {
 
   pinMode(led, OUTPUT);
   digitalWrite(led, 0);
-  Serial.begin(115200);
 
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
@@ -85,8 +146,9 @@ void setup(void) {
   tft.println(WiFi.localIP());
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
 
-  server.on("/", handleRoot);
-  server.onNotFound(handleNotFound);
+  server.on("/", HTTP_GET, handleStatus);
+  server.on("/", HTTP_POST, handleAction);
+//  server.onNotFound(handleNotFound);
   server.begin();
   tft.println();
   tft.println("HTTP started");
@@ -110,6 +172,8 @@ void setup(void) {
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
   }
 
+  pinMode(RELE_01, OUTPUT);
+  pinMode(WATER_PIN, INPUT);
 }
 
 void loop(void) {

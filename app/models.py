@@ -7,13 +7,9 @@ from app.config import Config
 from app.device import Device as PhysicalDevice
 from sqlalchemy import event
 from sqlalchemy.orm import relationship
-from flask import current_app
-from flask_sqlalchemy import SQLAlchemy
 
 log = logging.getLogger(__name__)
 NOT_APPLICABLE = 'N/A'
-
-# db = SQLAlchemy()
 
 
 class UnexpectedModelException(Exception):
@@ -151,11 +147,18 @@ class Task(Base):
     def task_metadata(self):
         if not self._task_meta:
             return {}
-        return json.loads(self._task_meta)
+        try:
+            return json.loads(self._task_meta) or {}
+        except (TypeError, json.JSONDecodeError) as e:
+            log.error(f"Failed to decode JSON '{self._task_meta}': {e}")
+            return {}
 
     @task_metadata.setter
     def task_metadata(self, md: dict):
-        self._task_meta = json.dumps(md)
+        try:
+            self._task_meta = json.dumps(md)
+        except TypeError as e:
+            log.error(f"Failed to encode JSON: '{md}': {e}")
 
     @task_metadata.deleter
     def task_metadata(self):
@@ -169,6 +172,24 @@ class Task(Base):
         d["control"] = self.control.dictionary if self.control else None
         return d
 
+    @staticmethod
+    def set_success(task_id):
+        t = Task.query.filter_by(id=task_id).first()
+        if t:
+            t.last_run = datetime.utcnow()
+            t.last_run_success = True
+            t.last_run_error = None
+            db.session.commit()
+
+    @staticmethod
+    def set_failed(task_id, exception):
+        t = Task.query.filter_by(id=task_id).first()
+        if t:
+            t.last_run = datetime.utcnow()
+            t.last_run_success = False
+            t.last_run_error = str(exception)
+            db.session.commit()
+
 
 class Device(Base):
     """
@@ -181,6 +202,7 @@ class Device(Base):
     uuid = db.Column(db.String(80), unique=True, nullable=True)
     # Human readable, user can change it to his liking
     name = db.Column(db.String(80), nullable=False)
+    url = db.Column(db.String(80), nullable=True)
     type = db.Column(db.String(80), nullable=True)
 
     is_online = db.Column(db.Boolean(), default=False)
@@ -258,7 +280,7 @@ class Device(Base):
         d = Device.query_by_serial_device(device)
         if not d and create:
             d = Device(uuid=device.uuid, name=str(device),
-                       type=device.device_type.value)
+                       type=device.device_type.value, url=device.url)
             db.session.add(d)
             db.session.commit()
         if d:

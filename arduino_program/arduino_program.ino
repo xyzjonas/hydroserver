@@ -5,11 +5,11 @@
 #define DEVICE_UUID "a669c4da-5eeb-11eb-ae93-0242ac130002"
 //#define DEVICE_UUID "8c7448de-3d36-4e64-bf01-efa58b44d45b"
 
-#define PLOVAK 2
+#define PLOVAK 26
 #define LED_G 11
 #define LED_R 12
 #define LED_B 13
-#define RELE_01 9
+#define RELE_01 2
 #define RELE_02 10
 
 #define pinDHT 8

@@ -49,12 +49,15 @@ class SerialDevice(Device):
     def _get_uuid(self):
         return self.__uuid
 
+    def _get_url(self):
+        return f"serial://{self.port}:{self.baud}"
+
     # @Override
     def _init(self):
         log.info("Initializing {}...".format(self))
         try:
             self.serial = Serial(self.port, self.baud, timeout=self.TIMEOUT)
-            time.sleep(2)  # fixme: serial takes time to be ready to receive
+            time.sleep(2)  # serial takes time to be ready to receive
 
             device_info = self._parse_response(
                 self._send_raw(Command.STATUS.value))

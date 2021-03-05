@@ -1,4 +1,5 @@
-from app import create_app, CACHE, init_device
+from app import create_app, init_device
+from app.cache import CACHE
 from app.models import db, Device
 from app.device import scan
 

@@ -4,18 +4,16 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
+from flask import current_app
 
-from app import CACHE, Config
+from app import db
+from app.cache import CACHE
 from app.device import Device as PhysicalDevice
-from app.models import db, Device
+from app.models import Device
 from app.scheduler.tasks import ScheduledTask, \
     TaskException, TaskNotCreatedException
 
 log = logging.getLogger(__name__)
-MAX_WORKERS = Config.MAX_WORKERS
-SAFE_INTERVAL = Config.SAFE_INTERVAL
-RECONNECT_ATTEMPTS = Config.RECONNECT_ATTEMPTS
-IDLE_INTERVAL_SECONDS = Config.IDLE_INTERVAL_SECONDS
 
 
 class Scheduler:
@@ -26,11 +24,17 @@ class Scheduler:
 
     def __init__(self, device: PhysicalDevice):
         self.device = device
-        self.executor = ThreadPoolExecutor(max_workers=MAX_WORKERS)
         self.device_uuid = self.device.uuid
         self.__running = False
         self.__should_be_running = False
 
+        with current_app.app_context():
+            self.MAX_WORKERS = current_app.config['MAX_WORKERS']
+            self.SAFE_INTERVAL = current_app.config['SAFE_INTERVAL']
+            self.RECONNECT_ATTEMPTS = current_app.config['RECONNECT_ATTEMPTS']
+            self.IDLE_INTERVAL_SECONDS = current_app.config['IDLE_INTERVAL_SECONDS']
+
+        self.executor = ThreadPoolExecutor(max_workers=self.MAX_WORKERS)
         self.__last_executed = set()
 
     def __repr__(self):
@@ -68,6 +72,13 @@ class Scheduler:
         self.__last_executed.add(task)
         task.runnable.run(self.device)
 
+    def __stop_scheduler(self):
+        log.warning(f"{self}: no tasks received for quite some "
+                    "time, stopping scheduling...")
+        self.executor.shutdown(wait=True)
+        self.__running = False
+        CACHE.remove_scheduler(self.device_uuid)
+
     def __loop(self):
         """
         * grabs device tasks from DB
@@ -80,10 +91,10 @@ class Scheduler:
         self.__running = True
         while self.__should_be_running:
             # 1) Health-check
-            if not self.device.is_responding:
+            if not self.device.health_check():
                 self.__set_is_offline(self.device_uuid)
                 attempts += 1
-                if attempts > RECONNECT_ATTEMPTS:
+                if attempts > self.RECONNECT_ATTEMPTS:
                     log.warning(f"{self}: device offline, stopping scheduling...")
                     self.executor.shutdown(wait=True)
                     self.__running = False
@@ -92,7 +103,7 @@ class Scheduler:
                     return
                 to_be_scheduled = set()
                 log.warning(f"{self}: device offline, schedule cleared "
-                            f"(attempts={attempts}/{RECONNECT_ATTEMPTS}).")
+                            f"(attempts={attempts}/{self.RECONNECT_ATTEMPTS}).")
             else:
                 attempts = 0
                 to_be_scheduled = self.__load_tasks_from_db(self.device) \
@@ -105,7 +116,7 @@ class Scheduler:
             for task in active_tasks:
                 time_to_next = task.scheduled_time - datetime.utcnow()
                 # if inside the 'safe interval' execute right away and don't wait
-                if time_to_next <= timedelta(seconds=SAFE_INTERVAL):
+                if time_to_next <= timedelta(seconds=self.SAFE_INTERVAL):
                     self.executor.submit(self.__execute, task)
 
             active_tasks = to_be_scheduled.difference(self.__last_executed)
@@ -118,24 +129,20 @@ class Scheduler:
                 log.debug(f"Up-next: {up_next}, i.e. in {up_next.scheduled_time - datetime.utcnow()}")
             else:
                 # 3) auto-stop in case of no tasks
-                time_to_next = timedelta(seconds=IDLE_INTERVAL_SECONDS)
+                time_to_next = timedelta(seconds=self.IDLE_INTERVAL_SECONDS)
                 no_task_retry_limit += 1
-                if no_task_retry_limit > RECONNECT_ATTEMPTS:
-                    log.warning(f"{self}: no tasks received for quite some "
-                                "time, stopping scheduling...")
-                    self.executor.shutdown(wait=True)
-                    self.__running = False
-                    CACHE.remove_scheduler(self.device_uuid)
+                if no_task_retry_limit > self.RECONNECT_ATTEMPTS:
+                    self.__stop_scheduler()
                     return
 
             # 3) Time delta shenanigans
-            if not time_to_next or time_to_next.seconds >= IDLE_INTERVAL_SECONDS:
-                time_to_next = timedelta(seconds=IDLE_INTERVAL_SECONDS)
+            if not time_to_next or time_to_next.seconds >= self.IDLE_INTERVAL_SECONDS:
+                time_to_next = timedelta(seconds=self.IDLE_INTERVAL_SECONDS)
                 self.__last_executed.clear()  # CLEANUP - prevent memory leak
 
             # 4) Obligatory sleep
             log.debug(f"{self}: sleeping for {time_to_next.total_seconds()}")
-            sleep_secs = time_to_next.total_seconds() - SAFE_INTERVAL
+            sleep_secs = time_to_next.total_seconds() - self.SAFE_INTERVAL
             time.sleep(sleep_secs if sleep_secs > 0 else 0.01)
 
         # end WHILE

@@ -2,25 +2,12 @@ import pytest
 
 from app import db
 from app.models import Task, Device, Sensor, Control
-from app.scheduler.tasks import ScheduledTask, TaskType, \
-    Toggle, Interval, Status, \
-    TaskNotCreatedException, TaskRunnable
+from app.scheduler.tasks import ScheduledTask, TaskType, TaskNotCreatedException, TaskRunnable
+from app.scheduler.tasks.builtin import Status, Toggle, Interval
 
 
-@pytest.fixture()
-def task():
-    def _task(device, task_type, sensor=None, control=None, meta=None):
-        t = Task(device=device, type=task_type, sensor=sensor,
-                 control=control, task_metadata=meta)
-        db.session.add(t)
-        db.session.commit()
-        return t
-
-    return _task
-
-
-def test_from_db_object_status(mocked_device_and_db, task):
-    t = task(mocked_device_and_db, TaskType.STATUS.value)
+def test_from_db_object_status(mocked_device_and_db, task_factory):
+    t = task_factory(mocked_device_and_db, TaskType.STATUS.value)
     sch = ScheduledTask.from_db_object(t)
     assert sch
 
@@ -52,14 +39,15 @@ def test_from_db_object_interval(mocked_device_and_db):
 
 
 @pytest.mark.parametrize("task_type", [None, "", 123, -10, "asjdsa"])
-def test_runnable_from_database_task_negative(mocked_device_and_db, task, task_type):
-    t = task(mocked_device_and_db, task_type)
+def test_runnable_from_database_task_negative(mocked_device_and_db, task_factory, task_type):
+    t = task_factory(mocked_device_and_db, task_type)
     with pytest.raises(TaskNotCreatedException, match="Unknown task type"):
         TaskRunnable.from_database_task(t)
 
-def test_toggle(mocked_device, mocked_device_with_sensor_and_control, task):
+
+def test_toggle(mocked_device, mocked_device_with_sensor_and_control, task_factory):
     device, sensor, control = mocked_device_with_sensor_and_control
-    t = task(device, TaskType.TOGGLE.value, control=control)
+    t = task_factory(device, TaskType.TOGGLE.value, control=control)
 
     toggle_task = Toggle(t.id)
     toggle_task.run(mocked_device)
@@ -69,17 +57,19 @@ def test_toggle(mocked_device, mocked_device_with_sensor_and_control, task):
     assert not task_db.last_run_error
 
 
-def test_toggle_no_control(mocked_device, mocked_device_with_sensor_and_control, task):
+def test_toggle_no_control(mocked_device, mocked_device_with_sensor_and_control,
+                           task_factory):
     device, sensor, control = mocked_device_with_sensor_and_control
-    t = task(device, TaskType.TOGGLE.value)
+    t = task_factory(device, TaskType.TOGGLE.value)
 
     with pytest.raises(TaskNotCreatedException):
         Toggle(t.id)
 
 
-def test_toggle_from_database_task(mocked_device_with_sensor_and_control, task):
+def test_toggle_from_database_task(mocked_device_with_sensor_and_control,
+                                   task_factory):
     device, s, c = mocked_device_with_sensor_and_control
-    t = task(device, TaskType.TOGGLE.value, control=c)
+    t = task_factory(device, TaskType.TOGGLE.value, control=c)
     assert type(TaskRunnable.from_database_task(t)) is Toggle
 
 
@@ -89,17 +79,18 @@ def test_toggle_no_task(db_setup, task_id):
         Toggle(task_id)
 
 
-def test_interval_from_database_task(mocked_device_with_sensor_and_control, task):
+def test_interval_from_database_task(mocked_device_with_sensor_and_control,
+                                     task_factory):
     device, s, c = mocked_device_with_sensor_and_control
-    t = task(device, TaskType.INTERVAL.value, control=c, sensor=s)
+    t = task_factory(device, TaskType.INTERVAL.value, control=c, sensor=s)
     t.task_metadata = {"interval": "10-20"}
     db.session.commit()
     assert type(TaskRunnable.from_database_task(t)) is Interval
 
 
-def test_interval(mocked_device, mocked_device_with_sensor_and_control, task):
+def test_interval(mocked_device, mocked_device_with_sensor_and_control, task_factory):
     device, sensor, control = mocked_device_with_sensor_and_control
-    t = task(device, TaskType.TOGGLE.value, control=control, sensor=sensor)
+    t = task_factory(device, TaskType.TOGGLE.value, control=control, sensor=sensor)
     t.task_metadata = {"interval": "10-20"}
     db.session.commit()
 
@@ -117,31 +108,32 @@ def test_inerval_no_task(db_setup, task_id):
         Interval(task_id)
 
 
-def test_interval_no_meta(mocked_device_with_sensor_and_control, task):
+def test_interval_no_meta(mocked_device_with_sensor_and_control, task_factory):
     device, sensor, control = mocked_device_with_sensor_and_control
-    t = task(device, TaskType.INTERVAL.value, control=control, sensor=sensor)
+    t = task_factory(device, TaskType.INTERVAL.value, control=control, sensor=sensor)
     with pytest.raises(TaskNotCreatedException, match="'interval' field needed"):
         Interval(t.id)
 
 
-def test_interval_no_control(mocked_device_with_sensor_and_control, task):
+def test_interval_no_control(mocked_device_with_sensor_and_control, task_factory):
     device, sensor, control = mocked_device_with_sensor_and_control
-    t = task(device, TaskType.INTERVAL.value, sensor=sensor)
+    t = task_factory(device, TaskType.INTERVAL.value, sensor=sensor)
     t.task_metadata = {"interval": "10-20"}
     with pytest.raises(TaskNotCreatedException, match="Control needed for"):
         Interval(t.id)
 
 
-def test_interval_no_sensor(mocked_device, mocked_device_with_sensor_and_control, task):
+def test_interval_no_sensor(mocked_device, mocked_device_with_sensor_and_control,
+                            task_factory):
     device, sensor, control = mocked_device_with_sensor_and_control
-    t = task(device, TaskType.INTERVAL.value, control=control)
+    t = task_factory(device, TaskType.INTERVAL.value, control=control)
     t.task_metadata = {"interval": "10-20"}
     with pytest.raises(TaskNotCreatedException, match="Sensor needed for"):
         Interval(t.id)
 
 
-def test_status_from_database_task(mocked_device_and_db, task):
-    t = task(mocked_device_and_db, TaskType.STATUS.value)
+def test_status_from_database_task(mocked_device_and_db, task_factory):
+    t = task_factory(mocked_device_and_db, TaskType.STATUS.value)
     assert type(TaskRunnable.from_database_task(t)) is Status
 
 
@@ -151,8 +143,8 @@ def test_status_no_task(mocked_device_and_db, task_id):
         Status(task_id)
 
 
-def test_status(mocked_device, mocked_device_and_db, task):
-    t = task(mocked_device_and_db, TaskType.STATUS.value)
+def test_status(mocked_device, mocked_device_and_db, task_factory):
+    t = task_factory(mocked_device_and_db, TaskType.STATUS.value)
 
     status_task = Status(t.id)
     status_task.run(mocked_device)

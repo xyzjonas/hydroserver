@@ -1,9 +1,9 @@
 import json
 import logging
-
 from datetime import datetime
-from app import CACHE, db
-from app.config import Config
+
+from app import db
+from app.cache import CACHE
 from app.device import Device as PhysicalDevice
 from sqlalchemy import event
 from sqlalchemy.orm import relationship
@@ -104,7 +104,8 @@ class Control(Base):
             log.error(f"{self}: failed to parse bool '{value}': {e}")
             self._state = False
             return
-        self._state = not bool(x) if Config.INVERT_BOOLEAN else bool(x)
+        INVERT_BOOLEAN = True  # todo: remove once JSON only communication is in place
+        self._state = not bool(x) if INVERT_BOOLEAN else bool(x)
 
     @property
     def dictionary(self):

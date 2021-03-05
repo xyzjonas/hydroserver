@@ -29,7 +29,10 @@ class Config(object):
         "sensor_prefix": "read_"
     }
 
+    PLUGIN_PATHS = ["/home/jobrauer/Documents/app_pluginsqapwo"]
+
 
 class TestConfig(Config):
     TEST = True
     SQLALCHEMY_DATABASE_URI = "sqlite://"
+    IDLE_INTERVAL_SECONDS = 5

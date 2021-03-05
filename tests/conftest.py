@@ -3,7 +3,7 @@ import pytest
 from app import create_app, db, init_device
 from app.config import TestConfig
 from app.device import serial, mock, wifi
-from app.models import Device, Control, Sensor
+from app.models import Device, Control, Sensor, Task
 
 from tests.constants import WIFI_DEVICE
 
@@ -17,7 +17,8 @@ def test_config():
 def app_setup():
     application = create_app(TestConfig)
     db.drop_all()
-    return application
+    with application.app_context() as context:
+        yield application
 
 
 @pytest.fixture()
@@ -52,7 +53,6 @@ def mocked_device_with_sensor_and_control(mocked_device_and_db):
     db.session.delete(c)
     db.session.delete(s)
     db.session.commit()
-
 
 
 # SERIAL
@@ -99,3 +99,33 @@ def control(actual_serial_device_and_db):
     yield control
     db.session.delete(control)
     db.session.commit()
+
+
+@pytest.fixture()
+def task_factory():
+    params = ["task"]
+
+    def _task(device, task_type, sensor=None, control=None, meta=None):
+        t = Task(device=device, type=task_type, sensor=sensor,
+                 control=control, task_metadata=meta)
+        db.session.add(t)
+        db.session.commit()
+        params[0] = t
+        return t
+    yield _task
+    task = params[0]
+    db.session.delete(task)
+    db.session.commit()
+
+
+@pytest.fixture()
+def status_tasks(mocked_device_and_db, task_factory):
+    def _tasks(num_of_tasks):
+        tasks = []
+        for i in range(num_of_tasks):
+            t = Task(device=mocked_device_and_db, type="status")
+            db.session.add(t)
+            db.session.commit()
+            tasks.append(t.id)
+        return tasks
+    return _tasks

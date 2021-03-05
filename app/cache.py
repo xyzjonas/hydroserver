@@ -53,3 +53,6 @@ class Cache:
         if self.has_active_scheduler(uuid):
             with self.lock:
                 del self.__active_schedulers[uuid]
+
+
+CACHE = Cache()

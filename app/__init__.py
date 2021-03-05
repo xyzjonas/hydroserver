@@ -4,11 +4,11 @@ from flask import Flask
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 
-from app.cache import Cache
+from app.cache import CACHE
 from app.config import Config
 
+
 SCAN_SLEEP = 2
-CACHE = Cache()
 
 db = SQLAlchemy()
 
@@ -35,9 +35,12 @@ def create_app(config_class=Config):
 
     CORS(app, resources={r'/*': {'origins': '*'}})
 
-    # with app.app_context():
+    # todo: remove
     db.drop_all()
     db.create_all()
+
+    from app.scheduler.plugins import PLUGIN_MANAGER
+    PLUGIN_MANAGER.initialize(Config.PLUGIN_PATHS)
 
     return app
 

@@ -1,7 +1,7 @@
 import pytest
 import time
 
-from app import CACHE
+from app.cache import CACHE
 from app.scheduler.tasks import TaskType
 
 
@@ -13,7 +13,7 @@ from app.scheduler.tasks import TaskType
 def test_register_invalid_url(app_setup, url):
     with app_setup.test_client() as client:
         r = client.post("/devices/register", json={"url": url})
-        assert r.status_code == 400
+        assert r.status_code == 500  # device registration fails
 
 
 @pytest.mark.parametrize("data", [None, {}, {"url": None}, {"other_param": 12}])
@@ -51,4 +51,13 @@ def test_post_task(app_setup, mocked_device, mocked_device_and_db):
         r = client.post(url, json=data)
         assert r.status_code == 201
     time.sleep(0.2)
+    assert CACHE.has_active_scheduler(mocked_device.uuid)
+
+
+def test_post_run_scheduler(app_setup, mocked_device, mocked_device_and_db):
+    url = f"/devices/{mocked_device_and_db.id}/scheduler"
+    assert not CACHE.has_active_scheduler(mocked_device.uuid)
+    with app_setup.test_client() as client:
+        r = client.post(url)
+        assert r.status_code == 200
     assert CACHE.has_active_scheduler(mocked_device.uuid)

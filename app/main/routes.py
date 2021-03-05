@@ -1,16 +1,12 @@
 import logging
-import threading
 
 from croniter import croniter, CroniterNotAlphaError, CroniterBadCronError
 from flask import jsonify, request
 
-from app import CACHE, init_device
 from app.main import bp
+from app.main.device_controller import ControllerError, run_scheduler, \
+    device_action, device_register, device_scan
 from app.models import db, Device, Task, Control, Sensor
-from app.device import DeviceException
-from app.device.wifi import WifiDevice
-from app.device.serial import scan
-from app.scheduler import Scheduler
 
 
 log = logging.getLogger(__name__)
@@ -23,6 +19,15 @@ def _get_id(string_or_int):
         return int(string_or_int)
     else:
         raise ValueError("Supplied id value must be 'str' or 'int'")
+
+
+@bp.route('/', methods=['GET'])
+def root():
+    # supported tasks
+    # version
+    # up-time
+    # cache?
+    pass
 
 
 @bp.route('/devices', methods=['GET'])
@@ -162,15 +167,12 @@ def post_device_tasks(device_id):
 
     db.session.add(task)
     db.session.commit()
+    task_info = f"<id={task.id}name={task.name}>"
 
-    if created:
-        # start up the scheduler for the device
-        executor = Scheduler(CACHE.get_active_device_by_uuid(device.uuid))
-        CACHE.add_scheduler(device.uuid, executor)
-        threading.Thread(target=executor.start).start()
-
-    return (f"New task created: {task}", 201) if created \
-        else (f"Task modified: {task}", 200)
+    if created:  # start up the scheduler for the device
+        run_scheduler(device)
+    return (f"New task created: {task_info}", 201) if created \
+        else (f"Task {task_info} modified: ", 200)
 
 
 @bp.route('/devices/<int:device_id>', methods=['POST'])
@@ -203,28 +205,12 @@ def device_action(device_id):
     if "control" not in data:
         return "'control' field is required", 400
 
-    control = Control.query.filter_by(name=data["control"], device=device_db).first()
-    if not control:
-        return f"{device_db.name}: no such control '{data['control']}'", 400
-
-    # command = f"action_{control.name}"
-
-    device = CACHE.get_active_device_by_uuid(device_db.uuid)
-    if not device:
-        return f"{device_db.name} not connected", 503
-
+    control = Control.query.filter_by(
+        name=data["control"], device=device_db).first_or_404()
     try:
-        response = device.send_control(control.name)
-        if not response.is_success:
-            return f"{device}: '{control.name}' ERROR - {response}", 500
-
-        control.state = response.data
-        log.info(f"!!! CUM SEM: state={control.state}, {response.data}")
-        db.session.add(control)
-        db.session.commit()
-        return f"{device}: '{control.name}' cmd sent successfully: {response}", 200
-    except DeviceException as e:
-        return f"{device}: '{control.name}' cmd failed: {e}", 500
+        device_action(device_db, control)
+    except ControllerError as e:
+        return f"{device_db.name}: '{control.name}' cmd failed: {e}", 500
 
 
 @bp.route('/devices/<string:device_id>/categorize', methods=['POST'])
@@ -288,54 +274,25 @@ def delete_sensor(device_id, sensor_id):
 @bp.route('/devices/<string:device_id>/scheduler', methods=['POST'])
 def device_run_scheduler(device_id):
     device_db = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
-    if CACHE.has_active_scheduler(device_db.uuid):
-        return f"'{device_db.name}' has already an active executor.", 200
-    # start up the scheduler for the device
-    executor = Scheduler(CACHE.get_active_device_by_uuid(device_db.uuid))
-    CACHE.add_scheduler(device_db.uuid, executor)
-    threading.Thread(target=executor.start).start()
+    run_scheduler(device_db)
     return f"'{device_db.name}' executor started.", 200
-
-
-@bp.route('/cache', methods=['GET'])
-def get_cache():
-    data = {}
-    for d in CACHE.get_all_active_devices():
-        data[d.uuid] = {
-            "device": str(d),
-            "scheduler": str(CACHE.get_active_scheduler(d.uuid))
-        }
-    return jsonify(data), 200
 
 
 @bp.route('/devices/register', methods=['POST'])
 def register_device():
     data = request.json
-    if not data or 'url' not in data:
+    if not data or 'url' not in data or data.get('url') is None:
         return "'url' field needed.", 400
 
     url = data['url']
-    device = WifiDevice(url=url)
-
-    if not device.is_site_online():
-        return f"Device '{url}' is not responding.", 400
     try:
-        status = device.read_status()
-        d = Device.from_status_response(device, status.data, create=True)
-
-        db.session.add(d)
-        db.session.commit()
-    except Exception as e:
+        device_register(url)
+    except ControllerError as e:
         return f"Device registration failed: {e}", 500
-    CACHE.add_active_device(device)
     return f"Device '{url}' registered", 201
 
 
 @bp.route('/devices/scan', methods=['POST'])
 def scan_devices():
-    CACHE.clear_devices()
-    found_devices = scan()
-    for device in found_devices:
-        if init_device(device):
-            CACHE.add_active_device(device)
+    found_devices = device_scan()
     return f"Scan complete, {len(found_devices)} found devices {found_devices}.", 200

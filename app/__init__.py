@@ -24,8 +24,7 @@ def create_app(config_class=Config):
     app.config.from_object(config_class)
 
     db.init_app(app)
-    # global db
-    db.app = app
+    db.app = app  # global db
 
     # flask migrate
     migrate.init_app(app, db)
@@ -33,19 +32,7 @@ def create_app(config_class=Config):
     from app.main import bp as main_bp
     app.register_blueprint(main_bp)
 
-    if not app.debug and not app.testing:
-        # ... no changes to logging setup
-        pass
-
     CORS(app, resources={r'/*': {'origins': '*'}})
-
-    # todo: remove
-    # db.drop_all()
-    # db.create_all()
-    # devices = models.Device.query.all()
-
-    from app.scheduler.plugins import PLUGIN_MANAGER
-    PLUGIN_MANAGER.initialize(Config.PLUGIN_PATHS)
 
     return app
 

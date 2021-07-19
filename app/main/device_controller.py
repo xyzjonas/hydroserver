@@ -70,10 +70,11 @@ def device_scan():
     return found_devices
 
 
-def init_devices():
+def init_devices(devices=None):
     """Init (reconnect & cache) all devices found in the db."""
-    devices = Device.query.all()
-    log.info(f'Initializing devices ({len(devices)} found in the db).')
+    if not devices:
+        devices = Device.query.all()
+        log.info(f'Initializing devices ({len(devices)} found in the db).')
     for device in devices:
         log.info(f'Initializing {device}')
         if CACHE.get_active_device_by_uuid(device.uuid):
@@ -93,10 +94,14 @@ def init_devices():
         else:
             log.error(f'Unsupported device type: {type_}')
             continue
-        status = physical_device.read_status()
+        status = physical_device.read_status(strict=False)
         if not status.is_success:
             log.error(f'Unreachable device: {physical_device}')
+            device.is_online = False
+            db.session.commit()
             continue
+        device.is_online = True
+        db.session.commit()
         CACHE.add_active_device(physical_device)
 
 

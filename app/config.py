@@ -32,6 +32,6 @@ class Config(object):
 
 
 class TestConfig(Config):
-    TEST = True
+    TESTING = True
     SQLALCHEMY_DATABASE_URI = "sqlite://"
     IDLE_INTERVAL_SECONDS = 5

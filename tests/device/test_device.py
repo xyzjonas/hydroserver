@@ -3,7 +3,7 @@ import pytest
 
 from app.main.device_controller import init_device
 from app.device import DeviceException, DeviceResponse
-from app.device import mock
+from app.device import mock, Status
 from app.device.serial import SerialDevice
 from app.device.wifi import WifiDevice
 from app.main.device_mapper import DeviceMapper
@@ -56,10 +56,14 @@ def test_reconnect(mocked_device):
     assert mocked_device.is_responding
 
 
-@pytest.mark.parametrize("data", [None, "", 123, {}])
+@pytest.mark.parametrize(
+    "data",
+    [None, "", 123, {}, {'status': None}, {'status': 'invalid'}],
+    ids=['none', 'empty_str', 'integer', 'empty_dict', 'status_none', 'invalid_status']
+)
 def test_parse_device_response_empty(data):
-    with pytest.raises(DeviceException, match="does not contain 'status' field"):
-        DeviceResponse.from_response_data(data=data)
+    response = DeviceResponse.from_response_data(data=data)
+    assert response.status == Status.NO_DATA
 
 
 @pytest.mark.parametrize("data", [

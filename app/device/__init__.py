@@ -34,7 +34,7 @@ class Status(Enum):
         try:
             return Status(string)
         except ValueError:
-            return Status.FAIL
+            return Status.NO_DATA
 
 
 class DeviceException(Exception):
@@ -57,12 +57,10 @@ class DeviceResponse:
 
     @classmethod
     def from_response_data(cls, data, extract_field=None):
-        try:
-            status = Status.from_string(data.pop("status"))
-        except (KeyError, AttributeError):
-            raise DeviceException(
-                f"Response '{data or None}' does not contain 'status' field.")
-
+        if type(data) is not dict:
+            status = Status.NO_DATA
+        else:
+            status = Status.from_string(data.pop("status", None))
         if extract_field:
             if not data.get(extract_field):
                 raise DeviceException(

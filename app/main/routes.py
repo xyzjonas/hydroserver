@@ -5,6 +5,7 @@ from flask import jsonify, request
 
 from app.main import bp
 from app.main import device_controller
+from app.cache import CACHE
 # from app.main.device_controller import ControllerError, run_scheduler, \
 #     device_action, device_register, device_scan
 from app.models import db, Device, Task, Control, Sensor
@@ -27,7 +28,12 @@ def root():
     # version
     # up-time
     # cache?
-    pass
+    data = {
+        'version': '0.0.1',
+        'up-time': 2123452,
+        'active devices': [str(d) for d in CACHE.get_all_active_devices()]
+    }
+    return jsonify(data)
 
 
 @bp.route('/devices', methods=['GET'])

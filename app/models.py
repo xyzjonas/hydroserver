@@ -105,8 +105,7 @@ class Control(Base):
             log.error(f"{self}: failed to parse bool '{value}': {e}")
             self._state = False
             return
-        INVERT_BOOLEAN = True  # todo: remove once JSON only communication is in place
-        self._state = not bool(x) if INVERT_BOOLEAN else bool(x)
+        self._state = bool(x)
 
     @property
     def dictionary(self):
@@ -123,8 +122,8 @@ class Task(Base):
     cron = db.Column(db.String(80), default="* * * * *")
     type = db.Column(db.String(80), nullable=True)
 
-    locked = db.Column(db.Boolean(), default=False)
-    paused = db.Column(db.Boolean(), default=False)
+    # locked = db.Column(db.Boolean(), default=False)
+    # paused = db.Column(db.Boolean(), default=False)
 
     # store any task specifics
     _task_meta = db.Column(db.String(200), nullable=True)

@@ -1,11 +1,11 @@
 import logging
-import traceback
 import os
+import traceback
 from inspect import isclass
+
 from pluginbase import PluginBase
 
 from app.scheduler import tasks
-
 
 log = logging.getLogger(__name__)
 

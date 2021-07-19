@@ -4,10 +4,10 @@ from croniter import croniter, CroniterNotAlphaError, CroniterBadCronError
 from flask import jsonify, request
 
 from app.main import bp
-from app.main.device_controller import ControllerError, run_scheduler, \
-    device_action, device_register, device_scan
+from app.main import device_controller
+# from app.main.device_controller import ControllerError, run_scheduler, \
+#     device_action, device_register, device_scan
 from app.models import db, Device, Task, Control, Sensor
-
 
 log = logging.getLogger(__name__)
 
@@ -170,7 +170,7 @@ def post_device_tasks(device_id):
     task_info = f"<id={task.id}name={task.name}>"
 
     if created:  # start up the scheduler for the device
-        run_scheduler(device)
+        device_controller.run_scheduler(device)
     return (f"New task created: {task_info}", 201) if created \
         else (f"Task {task_info} modified: ", 200)
 
@@ -206,10 +206,12 @@ def device_action(device_id):
         return "'control' field is required", 400
 
     control = Control.query.filter_by(
-        name=data["control"], device=device_db).first_or_404()
+        name=data["control"], device=device_db) \
+        .first_or_404(description=f"No such control {data['control']}")
     try:
-        device_action(device_db, control)
-    except ControllerError as e:
+        device_controller.device_action(device_db, control)
+        return f"{device_db.name}: '{control.name}' cmd success", 200
+    except device_controller.ControllerError as e:
         return f"{device_db.name}: '{control.name}' cmd failed: {e}", 500
 
 
@@ -245,8 +247,7 @@ def post_device_categorize(device_id):
     return f"{t} successfully created", 201
 
 
-@bp.route(
-    '/devices/<string:device_id>/controls/<int:control_id>', methods=['DELETE'])
+@bp.route('/devices/<string:device_id>/controls/<int:control_id>', methods=['DELETE'])
 def delete_control(device_id, control_id):
     device = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
     control = Control.query.filter_by(id=_get_id(control_id)).first_or_404()
@@ -258,8 +259,7 @@ def delete_control(device_id, control_id):
     return f"'{name}' deleted.", 200
 
 
-@bp.route(
-    '/devices/<string:device_id>/sensors/<int:sensor_id>', methods=['DELETE'])
+@bp.route('/devices/<string:device_id>/sensors/<int:sensor_id>', methods=['DELETE'])
 def delete_sensor(device_id, sensor_id):
     device = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
     sensor = Sensor.query.filter_by(id=_get_id(sensor_id)).first_or_404()
@@ -274,7 +274,7 @@ def delete_sensor(device_id, sensor_id):
 @bp.route('/devices/<string:device_id>/scheduler', methods=['POST'])
 def device_run_scheduler(device_id):
     device_db = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
-    run_scheduler(device_db)
+    device_controller.run_scheduler(device_db)
     return f"'{device_db.name}' executor started.", 200
 
 
@@ -286,13 +286,13 @@ def register_device():
 
     url = data['url']
     try:
-        device_register(url)
-    except ControllerError as e:
+        device_controller.device_register(url)
+    except device_controller.ControllerError as e:
         return f"Device registration failed: {e}", 500
     return f"Device '{url}' registered", 201
 
 
 @bp.route('/devices/scan', methods=['POST'])
 def scan_devices():
-    found_devices = device_scan()
+    found_devices = device_controller.device_scan()
     return f"Scan complete, {len(found_devices)} found devices {found_devices}.", 200

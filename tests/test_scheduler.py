@@ -1,8 +1,10 @@
-import pytest
 import time
 
+import pytest
+
 from app import db
-from app.models import Task, Device
+from app.main.device_mapper import DeviceMapper
+from app.models import Task
 from app.scheduler import Scheduler
 from app.scheduler.tasks import TaskType
 
@@ -18,7 +20,7 @@ def status_task(mocked_device_and_db):
 @pytest.mark.parametrize("task_num", [5, 10, 50])
 def test_get_tasks_from_db(mocked_device, mocked_device_and_db, task_num):
     for i in range(task_num):
-        task = Task(device=Device.query_by_serial_device(mocked_device_and_db))
+        task = Task(device=DeviceMapper.from_physical(mocked_device_and_db).model)
         task.type = TaskType.STATUS.value
         db.session.commit()
     scheduler = Scheduler(mocked_device)

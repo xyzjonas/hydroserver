@@ -1,9 +1,9 @@
 import logging
 import threading
+
 import requests
 
 from app.device import Device, DeviceType, Command
-
 
 log = logging.getLogger(__name__)
 

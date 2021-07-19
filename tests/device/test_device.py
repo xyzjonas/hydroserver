@@ -1,13 +1,12 @@
 import mock
 import pytest
 
-from app import init_device
-from app.device import mock
-from app.models import Device
+from app.main.device_controller import init_device
 from app.device import DeviceException, DeviceResponse
+from app.device import mock
 from app.device.serial import SerialDevice
 from app.device.wifi import WifiDevice
-
+from app.main.device_mapper import DeviceMapper
 
 DEVICES = [
     WifiDevice(url="http://invalid-url/and/some/path"),
@@ -19,7 +18,7 @@ DEVICES_IDS = ["wifi", "serial"]
 def test_init_device(db_setup):
     d = mock.MockedDevice()
     assert init_device(d)
-    assert Device.query_by_serial_device(d)
+    assert DeviceMapper.from_physical(d).model
 
 
 @pytest.mark.parametrize("baud", [None, 19200])

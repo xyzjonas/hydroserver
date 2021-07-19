@@ -1,7 +1,9 @@
 import datetime
+
 import pytest
+
+from app import db
 from app.models import Device, Task, Sensor, Control
-from app import db, create_app
 
 
 @pytest.fixture()

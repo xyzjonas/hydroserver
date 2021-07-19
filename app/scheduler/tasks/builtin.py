@@ -1,6 +1,6 @@
 from app import db
-from app.models import Task, Device
 from app.device import Device as PhysicalDevice
+from app.models import Task, Device
 from app.scheduler.tasks import TaskRunnable, TaskType, TaskNotCreatedException, TaskException
 
 

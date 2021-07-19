@@ -4,14 +4,14 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
+
 from flask import current_app
 
 from app import db
 from app.cache import CACHE
 from app.device import Device as PhysicalDevice
-from app.models import Device
-from app.scheduler.tasks import ScheduledTask, \
-    TaskException, TaskNotCreatedException
+from app.main.device_mapper import DeviceMapper
+from app.scheduler.tasks import ScheduledTask, TaskException, TaskNotCreatedException
 
 log = logging.getLogger(__name__)
 
@@ -126,7 +126,8 @@ class Scheduler:
                 no_task_retry_limit = 0
                 up_next = active_tasks[0]
                 time_to_next = up_next.scheduled_time - datetime.utcnow()
-                log.debug(f"Up-next: {up_next}, i.e. in {up_next.scheduled_time - datetime.utcnow()}")
+                log.debug(
+                    f"Up-next: {up_next}, i.e. in {up_next.scheduled_time - datetime.utcnow()}")
             else:
                 # 3) auto-stop in case of no tasks
                 time_to_next = timedelta(seconds=self.IDLE_INTERVAL_SECONDS)
@@ -160,12 +161,10 @@ class Scheduler:
                 task.last_run_error = str(e)
                 db.session.commit()
 
-        device = Device.query_by_serial_device(serial_device)
+        device = DeviceMapper.from_physical(serial_device).model
         return {task for task in [__sanitize(t) for t in device.tasks] if task}
 
     @staticmethod
     def __set_is_offline(device_uuid):
-        d = Device.query.filter_by(uuid=device_uuid).first()
-        if d:
-            d.is_online = False
-            db.session.commit()
+        DeviceMapper.from_uuid(device_uuid).model.is_online = False
+        db.session.commit()

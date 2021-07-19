@@ -1,5 +1,6 @@
-import pytest
 import time
+
+import pytest
 
 from app.cache import CACHE
 from app.scheduler.tasks import TaskType
@@ -33,7 +34,7 @@ def test_send_command_invalid_command(app_setup, actual_serial_device_and_db):
     with app_setup.test_client() as client:
         url = f"/devices/{actual_serial_device_and_db.id}/action"
         r = client.post(url, json={"control": "no_such"})
-        assert r.status_code == 400
+        assert r.status_code == 404
 
 
 def test_send_command(app_setup, actual_serial_device_and_db, control):

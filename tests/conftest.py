@@ -1,10 +1,11 @@
 import pytest
 
-from app import create_app, db, init_device
+from app import create_app, db
 from app.config import TestConfig
 from app.device import serial, mock, wifi
-from app.models import Device, Control, Sensor, Task
-
+from app.main.device_controller import init_device
+from app.main.device_mapper import DeviceMapper
+from app.models import Control, Sensor, Task
 from tests.constants import WIFI_DEVICE
 
 
@@ -16,8 +17,7 @@ def test_config():
 @pytest.fixture(scope="session", autouse=True)
 def app_setup():
     application = create_app(TestConfig)
-    db.drop_all()
-    with application.app_context() as context:
+    with application.app_context():
         yield application
 
 
@@ -38,7 +38,7 @@ def mocked_device():
 @pytest.fixture()
 def mocked_device_and_db(mocked_device, db_setup):
     init_device(mocked_device)
-    device = Device.query_by_serial_device(mocked_device)
+    device = DeviceMapper.from_physical(mocked_device).model
     return device
 
 
@@ -56,7 +56,7 @@ def mocked_device_with_sensor_and_control(mocked_device_and_db):
 
 
 # SERIAL
-@pytest.fixture()
+@pytest.fixture(scope='session')
 def actual_serial_device():
     serial_devs = serial.scan()
     if not serial_devs:
@@ -66,8 +66,9 @@ def actual_serial_device():
 
 @pytest.fixture()
 def actual_serial_device_and_db(actual_serial_device, db_setup):
-    init_device(actual_serial_device)
-    device = Device.query_by_serial_device(actual_serial_device)
+    assert init_device(actual_serial_device)
+    device = DeviceMapper.from_physical(actual_serial_device).model
+    print(f'ID: {device.id}')
     return device
 
 
@@ -83,14 +84,14 @@ def actual_wifi_device():
 @pytest.fixture()
 def actual_wifi_device_and_db(actual_wifi_device, db_setup):
     init_device(actual_wifi_device)
-    device = Device.query_by_serial_device(actual_wifi_device)
+    device = DeviceMapper.from_physical(actual_wifi_device).model
     return device
 
 
 @pytest.fixture()
 def control(actual_serial_device_and_db):
     device = actual_serial_device_and_db
-    expected_control = "led_g"
+    expected_control = "switch_01"
     assert expected_control in device.unknown_commands
 
     control = Control(device=device, name=expected_control)

@@ -1,14 +1,15 @@
 import glob
+import json
 import logging
+import re
 import termios
 import threading
 import time
 
 from serial import Serial, SerialException
 
-from app.device import Device, DeviceType, DeviceException, Command
 from app import Config
-
+from app.device import Device, DeviceType, DeviceException, Command
 
 log = logging.getLogger(__name__)
 
@@ -38,23 +39,33 @@ class SerialDevice(Device):
     TIMEOUT = 5
     WAIT_FOR_RESPONSE = 0.1
 
+    __url_pattern = re.compile('^serial://(?P<port>[\w/-]+):(?P<baud>\d+)$')
+
     def __init__(self, port, baud):
         self.port = port
         self.baud = baud
         self.lock = threading.Lock()
         self.serial = None
         self.__uuid = None
-        super().__init__()
+        super(SerialDevice, self).__init__()
 
     def _get_uuid(self):
         return self.__uuid
+
+    @staticmethod
+    def port_baud(url: str):
+        """Return connection details from url string: serial://<port>:<baud>"""
+        match = re.match(SerialDevice.__url_pattern, str(url))
+        if not match:
+            return None
+        return match.groupdict()['port'], int(match.groupdict()['baud'])
 
     def _get_url(self):
         return f"serial://{self.port}:{self.baud}"
 
     # @Override
     def _init(self):
-        log.info("Initializing {}...".format(self))
+        log.debug("Initializing {}".format(self))
         try:
             self.serial = Serial(self.port, self.baud, timeout=self.TIMEOUT)
             time.sleep(2)  # serial takes time to be ready to receive
@@ -65,9 +76,9 @@ class SerialDevice(Device):
                 if "uuid" in device_info:
                     self.__uuid = device_info['uuid']
                 else:
-                    log.warning("Device info received, but without UUID field")
+                    log.error("Device info received, but without UUID field")
             else:
-                log.warning("Device info not received.")
+                log.error("Device info not received.")
         except (FileNotFoundError, SerialException, ValueError) as e:
             log.error("Failed to open serial connection: {}".format(e))
             self.serial = None
@@ -79,7 +90,10 @@ class SerialDevice(Device):
         with self.lock:
             try:
                 self.serial.flush()
-                to_write = "{}\n".format(command).encode("utf-8")
+                data = {
+                    'request': command
+                }
+                to_write = json.dumps(data).encode('utf-8')
                 self.serial.write(to_write)
                 time.sleep(self.WAIT_FOR_RESPONSE)
                 response = self.serial.readline().decode("utf-8").rstrip()
@@ -87,7 +101,9 @@ class SerialDevice(Device):
                     self.__uuid = None
                     log.warning(
                         "{}: response for '{}' not received..".format(self, command))
-                return response
+
+                response_json = json.loads(response)
+                return ",".join([f"{k}:{v}" for k, v in response_json.items()])
             except SerialException as e:
                 log.warning(e)
                 self.__uuid = None
@@ -110,7 +126,7 @@ class SerialDevice(Device):
         return self.__repr__()
 
     def __repr__(self):
-        return f"{super().__repr__()[:-2]}, port={self.port}, baud={self.baud}"
+        return f"{super().__repr__()[:-2]}, port={self.port}, baud={self.baud})>"
 
 
 def get_connected_devices():

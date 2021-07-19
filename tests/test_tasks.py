@@ -1,7 +1,7 @@
 import pytest
 
 from app import db
-from app.models import Task, Device, Sensor, Control
+from app.models import Task, Sensor, Control
 from app.scheduler.tasks import ScheduledTask, TaskType, TaskNotCreatedException, TaskRunnable
 from app.scheduler.tasks.builtin import Status, Toggle, Interval
 

@@ -2,11 +2,12 @@ import json
 import logging
 from datetime import datetime
 
+from sqlalchemy import event
+from sqlalchemy.orm import relationship
+
 from app import db
 from app.cache import CACHE
 from app.device import Device as PhysicalDevice
-from sqlalchemy import event
-from sqlalchemy.orm import relationship
 
 log = logging.getLogger(__name__)
 NOT_APPLICABLE = 'N/A'
@@ -122,6 +123,9 @@ class Task(Base):
     cron = db.Column(db.String(80), default="* * * * *")
     type = db.Column(db.String(80), nullable=True)
 
+    locked = db.Column(db.Boolean(), default=False)
+    paused = db.Column(db.Boolean(), default=False)
+
     # store any task specifics
     _task_meta = db.Column(db.String(200), nullable=True)
 
@@ -211,7 +215,7 @@ class Device(Base):
     # controls (=backref)
     # tasks (=backref)
 
-    # store any unreckognized device attributes (for later triage)
+    # store any unrecognized device attributes (for later manual triage)
     _unknown_commands = db.Column(db.String(500), nullable=True)
 
     @property
@@ -236,12 +240,9 @@ class Device(Base):
     @property
     def dictionary(self):
         d = self._to_dict()
-        d['sensors'] = sorted(
-            [s.dictionary for s in self.sensors], key=lambda t: t['id'])
-        d['controls'] = sorted(
-            [c.dictionary for c in self.controls], key=lambda t: t['id'])
-        d['tasks'] = sorted(
-            [t.dictionary for t in self.tasks], key=lambda t: t['id'])
+        d['sensors'] = sorted([s.dictionary for s in self.sensors], key=lambda t: t['id'])
+        d['controls'] = sorted([c.dictionary for c in self.controls], key=lambda t: t['id'])
+        d['tasks'] = sorted([t.dictionary for t in self.tasks], key=lambda t: t['id'])
         d['scheduler_running'] = CACHE.has_active_scheduler(self.uuid)
         d['unrecognized'] = self.unknown_commands
         return d
@@ -272,16 +273,13 @@ class Device(Base):
                 self.put_unknown_command(key, value)
 
     @classmethod
-    def query_by_serial_device(cls, device: PhysicalDevice):
-        return Device.query.filter_by(uuid=device.uuid).first()
-
-    @classmethod
-    def from_status_response(cls,
-                             device: PhysicalDevice, status: dict, create=True):
-        d = Device.query_by_serial_device(device)
+    def from_status_response(cls, device: PhysicalDevice, status: dict, create=True):
+        d = Device.query.filter_by(uuid=device.uuid).first()
         if not d and create:
-            d = Device(uuid=device.uuid, name=str(device),
-                       type=device.device_type.value, url=device.url)
+            d = Device(uuid=device.uuid,
+                       name=str(device),
+                       type=device.device_type.value,
+                       url=device.url)
             db.session.add(d)
             db.session.commit()
         if d:

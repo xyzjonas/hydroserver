@@ -1,8 +1,8 @@
 import logging
+import os
 from enum import Enum
 
 from app import Config
-
 
 log = logging.getLogger(__name__)
 
@@ -269,7 +269,6 @@ from app.device.mock import scan as mock_scan
 
 
 def scan():
-    import os
     try:
         mocked_devices = os.getenv("MOCK_DEV", "0")
         mocked_devices = int(mocked_devices)

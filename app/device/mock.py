@@ -1,4 +1,5 @@
 import uuid
+
 from app.device import Device
 
 
@@ -41,5 +42,5 @@ class MockedDevice(Device):
 
 
 def scan(num=1):
-    return [MockedDevice() for i in range(num)]
+    return [MockedDevice() for _ in range(num)]
 

@@ -1,8 +1,9 @@
 import logging
 from contextlib import wraps
-from croniter import croniter, CroniterNotAlphaError
 from datetime import datetime
 from enum import Enum
+
+from croniter import croniter, CroniterNotAlphaError
 
 from app.models import Task
 

@@ -11,7 +11,7 @@ def get_read_method_name(string):
     return f"read{''.join([item.capitalize() for item in items])}()"
 
 
-def generate(sensors: list, controls: list, tft=False, ):
+def generate(sensors: list, controls: list):
     fill_response_sensors = "\n".join([
         f"    response[\"{item}\"] = {get_read_method_name(item)};" for item in sensors
     ])

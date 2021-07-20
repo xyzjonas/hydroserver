@@ -63,14 +63,26 @@ def init_device(dev):
     status = dev.read_status()
     if status.is_success:
         device = Device.from_status_response(dev, status.data)
-        task = Task(name='status', cron='status', device=device,
-                    type=TaskType.STATUS.value, locked=True)
         db.session.add(device)
-        db.session.add(task)
+        if not Task.query.filter_by(device=device, name='status', cron='status').first():
+            task = Task(name='status', cron='status', device=device,
+                        type=TaskType.STATUS.value, locked=True)
+            db.session.add(task)
         db.session.commit()
         CACHE.add_active_device(dev)
         return True
     return False
+
+
+def run_scheduler(uuid):
+    if CACHE.has_active_scheduler(uuid):
+        return
+    physical_device = CACHE.get_active_device_by_uuid(uuid)
+    if not physical_device:
+        raise ControllerError(f"Scheduler couldn't be started, {uuid} not cached.")
+    scheduler = Scheduler(physical_device)
+    CACHE.add_scheduler(uuid, scheduler)
+    scheduler.start()
 
 
 def device_scan():
@@ -79,6 +91,7 @@ def device_scan():
     for device in found_devices:
         if init_device(device):
             CACHE.add_active_device(device)
+            run_scheduler(device.uuid)
     return found_devices
 
 
@@ -115,15 +128,4 @@ def init_devices(devices=None):
         device.is_online = True
         db.session.commit()
         CACHE.add_active_device(physical_device)
-
-
-def run_scheduler(device: Device):
-    if CACHE.has_active_scheduler(device.uuid):
-        return
-    physical_device = CACHE.get_active_device_by_uuid(device.uuid)
-    if not physical_device:
-        raise ControllerError(f"Scheduler couldn't be started, {device} not cached.")
-    scheduler = Scheduler(physical_device)
-    CACHE.add_scheduler(device.uuid, scheduler)
-    scheduler.start()
-
+        run_scheduler(device.uuid)

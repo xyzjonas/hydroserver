@@ -25,7 +25,7 @@ def test_init_devices():
 
 
 def test_run_scheduler(mocked_device, mocked_device_and_db):
-    run_scheduler(mocked_device_and_db)
+    run_scheduler(mocked_device_and_db.uuid)
     assert CACHE.has_active_scheduler(mocked_device.uuid)
 
 
@@ -38,6 +38,6 @@ def test_run_scheduler_no_device_cached(db_setup, device):
     db.session.commit()
 
     with pytest.raises(ControllerError):
-        run_scheduler(device)
+        run_scheduler(device.uuid)
 
     assert not CACHE.has_active_scheduler(device.uuid)

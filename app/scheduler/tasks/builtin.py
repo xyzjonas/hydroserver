@@ -70,6 +70,8 @@ class Status(TaskRunnable):
         response = device.read_status()
 
         d = Device.from_status_response(device, response.data)
+        if not response.is_success:
+            d.is_online = False
         db.session.add(d)
         db.session.commit()
         return True

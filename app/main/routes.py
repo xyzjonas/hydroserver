@@ -198,7 +198,7 @@ def post_device_tasks(device_id):
     task_info = f"<id={task.id}name={task.name}>"
 
     if created:  # start up the scheduler for the device
-        device_controller.run_scheduler(device)
+        device_controller.run_scheduler(device.uuid)
     return (f"New task created: {task_info}", 201) if created \
         else (f"Task {task_info} modified: ", 200)
 
@@ -303,7 +303,7 @@ def delete_sensor(device_id, sensor_id):
 def device_run_scheduler(device_id):
     device_db = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
     try:
-        device_controller.run_scheduler(device_db)
+        device_controller.run_scheduler(device_db.uuid)
     except device_controller.ControllerError as e:
         return f"{e}", 500
     return f"'{device_db.name}' executor started.", 200

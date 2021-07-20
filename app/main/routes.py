@@ -89,6 +89,7 @@ def get_device_controls(device_id):
 
 @bp.route('/devices/<int:device_id>/controls/<int:control_id>', methods=['POST'])
 def post_device_control(device_id, control_id):
+    Device.query.filter_by(id=_get_id(device_id)).first_or_404()
     c = Control.query.filter_by(id=_get_id(control_id)).first_or_404()
     data = request.json
     if not data:
@@ -110,10 +111,31 @@ def get_device_tasks(device_id):
 
 @bp.route('/devices/<int:device_id>/tasks/<int:task_id>', methods=['DELETE'])
 def delete_device_task(device_id, task_id):
+    Device.query.filter_by(id=_get_id(device_id)).first_or_404()
     task = Task.query.filter_by(id=_get_id(task_id)).first_or_404()
+    if task.locked:
+        return f"task '{task_id}' is locked.", 400
     db.session.delete(task)
     db.session.commit()
     return f"task '{task_id}' deleted", 200
+
+
+@bp.route('/devices/<int:device_id>/tasks/<int:task_id>/pause', methods=['POST'])
+def pause_device_task(device_id, task_id):
+    Device.query.filter_by(id=_get_id(device_id)).first_or_404()
+    task = Task.query.filter_by(id=_get_id(task_id)).first_or_404()
+    task.paused = True
+    db.session.commit()
+    return f'Task {task_id} paused.', 200
+
+
+@bp.route('/devices/<int:device_id>/tasks/<int:task_id>/resume', methods=['POST'])
+def resume_device_task(device_id, task_id):
+    Device.query.filter_by(id=_get_id(device_id)).first_or_404()
+    task = Task.query.filter_by(id=_get_id(task_id)).first_or_404()
+    task.paused = False
+    db.session.commit()
+    return f'Task {task_id} resumed.', 200
 
 
 @bp.route('/devices/<int:device_id>/tasks', methods=['POST'])

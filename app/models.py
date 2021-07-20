@@ -44,7 +44,7 @@ class Sensor(Base):
     unit = db.Column(db.String(80), nullable=True)
 
     device_id = db.Column(db.Integer, db.ForeignKey('device.id'), nullable=False)
-    device = db.relationship('Device', backref=db.backref('sensors', lazy=False))
+    device = db.relationship('Device', backref=db.backref('sensors', lazy=False, cascade='all, delete-orphan'))
 
     def __repr__(self):
         return f"<Sensor (name={self.name}, value={self.last_value} {self.unit}," \
@@ -78,7 +78,8 @@ class Control(Base):
     _state = db.Column(db.Boolean, default=False)
 
     device_id = db.Column(db.Integer, db.ForeignKey('device.id'), nullable=False)
-    device = db.relationship('Device', backref=db.backref('controls', lazy=False))
+    device = db.relationship('Device',
+                             backref=db.backref('controls', lazy=False, cascade='all, delete-orphan'))
 
     def __repr__(self):
         return f"<Control (name={self.name}, device={self.device_id})>"
@@ -119,11 +120,11 @@ class Task(Base):
     A schedule-able action to be performed on the device
     """
     name = db.Column(db.String(80), default="Unnamed task")
-    cron = db.Column(db.String(80), default="* * * * *")
+    cron = db.Column(db.String(80), default="* * * * *")  # cron signature or 'status' keyword
     type = db.Column(db.String(80), nullable=True)
 
-    # locked = db.Column(db.Boolean(), default=False)
-    # paused = db.Column(db.Boolean(), default=False)
+    locked = db.Column(db.Boolean(), default=False)
+    paused = db.Column(db.Boolean(), default=False)
 
     # store any task specifics
     _task_meta = db.Column(db.String(200), nullable=True)
@@ -139,7 +140,8 @@ class Task(Base):
     sensor = relationship(Sensor, uselist=False)
 
     device_id = db.Column(db.Integer, db.ForeignKey('device.id'), nullable=False)
-    device = db.relationship('Device', backref=db.backref('tasks', lazy=False))
+    device = db.relationship(
+        'Device', backref=db.backref('tasks', lazy=False, cascade='all, delete-orphan'))
 
     def __repr__(self):
         s = self.sensor.name if self.sensor else "NaN"

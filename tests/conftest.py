@@ -68,7 +68,6 @@ def actual_serial_device():
 def actual_serial_device_and_db(actual_serial_device, db_setup):
     assert init_device(actual_serial_device)
     device = DeviceMapper.from_physical(actual_serial_device).model
-    print(f'ID: {device.id}')
     return device
 
 
@@ -106,9 +105,9 @@ def control(actual_serial_device_and_db):
 def task_factory():
     params = ["task"]
 
-    def _task(device, task_type, sensor=None, control=None, meta=None):
-        t = Task(device=device, type=task_type, sensor=sensor,
-                 control=control, task_metadata=meta)
+    def _task(device, task_type, name=None, sensor=None, control=None, meta=None, locked=False, paused=False):
+        t = Task(device=device, name=name, type=task_type, sensor=sensor,
+                 control=control, task_metadata=meta, locked=locked, paused=paused)
         db.session.add(t)
         db.session.commit()
         params[0] = t

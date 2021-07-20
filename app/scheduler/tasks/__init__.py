@@ -1,4 +1,5 @@
 import logging
+import math
 from contextlib import wraps
 from datetime import datetime
 from enum import Enum
@@ -55,8 +56,21 @@ class ScheduledTask:
 
     @classmethod
     def from_db_object(cls, task_db: Task):
+        """Create the object and calculate next scheduled time."""
+        if task_db.paused:
+            return None
         try:
-            time = croniter(task_db.cron).get_next(datetime)
+            # if cron is set to 'status', run each 10s todo: configurable
+            if task_db.cron == 'status':
+                time = datetime.utcnow()
+                next_ten_seconds = math.ceil(time.second / 10) * 10
+                next_minute = time.minute
+                if next_ten_seconds > 50:
+                    next_ten_seconds = 0
+                    next_minute = next_minute + 1 if next_minute < 59 else 0
+                time = time.replace(second=next_ten_seconds, minute=next_minute, microsecond=0)
+            else:
+                time = croniter(task_db.cron).get_next(datetime)
             runnable = TaskRunnable.from_database_task(task_db)
             return ScheduledTask(task_db.id, time, runnable)
         except CroniterNotAlphaError:
@@ -113,8 +127,7 @@ class TaskRunnable:
                     if result:
                         Task.set_success(task_id)
                     else:
-                        Task.set_failed(
-                            task_id, "No errors, wrapped function returned 'False'")
+                        Task.set_failed(task_id, "No errors, wrapped function returned 'False'")
                 except Exception as e:
                     if task_id:
                         Task.set_failed(task_id, e)

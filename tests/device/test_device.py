@@ -7,6 +7,7 @@ from app.device import mock, Status
 from app.device.serial import SerialDevice
 from app.device.wifi import WifiDevice
 from app.main.device_mapper import DeviceMapper
+from app.models import Device
 
 DEVICES = [
     WifiDevice(url="http://invalid-url/and/some/path"),
@@ -18,7 +19,11 @@ DEVICES_IDS = ["wifi", "serial"]
 def test_init_device(db_setup):
     d = mock.MockedDevice()
     assert init_device(d)
-    assert DeviceMapper.from_physical(d).model
+    device_db = DeviceMapper.from_physical(d).model
+    assert device_db
+    assert len(device_db.tasks) == 1
+    assert device_db.tasks[0].cron == 'status'
+    assert device_db.tasks[0].type == 'status'
 
 
 @pytest.mark.parametrize("baud", [None, 19200])

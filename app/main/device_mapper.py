@@ -1,4 +1,4 @@
-from app import CACHE
+from app import CACHE, db
 from app.device import Device
 from app.models import Device
 

@@ -126,8 +126,7 @@ class Scheduler:
                 no_task_retry_limit = 0
                 up_next = active_tasks[0]
                 time_to_next = up_next.scheduled_time - datetime.utcnow()
-                log.debug(
-                    f"Up-next: {up_next}, i.e. in {up_next.scheduled_time - datetime.utcnow()}")
+                log.debug(f"Up-next: {up_next}, i.e. in {time_to_next}")
             else:
                 # 3) auto-stop in case of no tasks
                 time_to_next = timedelta(seconds=self.IDLE_INTERVAL_SECONDS)
@@ -139,6 +138,7 @@ class Scheduler:
             # 3) Time delta shenanigans
             if not time_to_next or time_to_next.seconds >= self.IDLE_INTERVAL_SECONDS:
                 time_to_next = timedelta(seconds=self.IDLE_INTERVAL_SECONDS)
+                log.debug('Clearing last-executed')
                 self.__last_executed.clear()  # CLEANUP - prevent memory leak
 
             # 4) Obligatory sleep

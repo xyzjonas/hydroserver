@@ -27,6 +27,14 @@ def test_get_tasks_from_db(mocked_device, mocked_device_and_db, task_num):
     assert len(scheduler.get_tasks_from_db()) == task_num
 
 
+def test_get_tasks_from_db_paused(mocked_device, mocked_device_and_db, task_factory):
+    task = task_factory(mocked_device_and_db, 'status', name='test-task', paused=True)
+    task_id = task.id
+    scheduler = Scheduler(mocked_device)
+    assert len(scheduler.get_tasks_from_db()) == 1  # only implicit status task
+    assert list(scheduler.get_tasks_from_db())[0].task_id != task_id
+
+
 def test_terminate(test_config, mocked_device, mocked_device_and_db):
     scheduler = Scheduler(device=mocked_device)
     scheduler.start()

@@ -12,6 +12,13 @@ def test_from_db_object_status(mocked_device_and_db, task_factory):
     assert sch
 
 
+def test_from_db_object_status_cron(mocked_device_and_db, task_factory):
+    t = task_factory(mocked_device_and_db, TaskType.STATUS.value)
+    t.cron = 'status'
+    sch = ScheduledTask.from_db_object(t)
+    assert sch
+
+
 def test_from_db_object_toggle(mocked_device_and_db):
     db_device = mocked_device_and_db
     task = Task(device=db_device)

@@ -6,8 +6,9 @@ from app.device import DeviceType, DeviceException, scan
 from app.device.wifi import WifiDevice
 from app.device.serial import SerialDevice
 
-from app.models import Device, Control
+from app.models import Device, Control, Task
 from app.scheduler import Scheduler
+from app.scheduler.tasks import TaskType
 
 log = logging.getLogger(__name__)
 
@@ -51,10 +52,21 @@ def device_register(url):
 
 
 def init_device(dev):
+    """
+    Create DB device object. Runs the first time the device is discovered.
+     * Health check.
+     * Create DB device model.
+     * Create locked status task.
+     * ...commit
+    """
+
     status = dev.read_status()
     if status.is_success:
-        d = Device.from_status_response(dev, status.data)
-        db.session.add(d)
+        device = Device.from_status_response(dev, status.data)
+        task = Task(name='status', cron='status', device=device,
+                    type=TaskType.STATUS.value, locked=True)
+        db.session.add(device)
+        db.session.add(task)
         db.session.commit()
         CACHE.add_active_device(dev)
         return True

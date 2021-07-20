@@ -16,9 +16,8 @@ args = sys.argv
 if 'run' in args:
     # initialize plug-in tasks
     from app.scheduler.plugins import PLUGIN_MANAGER
-    PLUGIN_MANAGER.initialize(app.Config.PLUGIN_PATHS)
+    PLUGIN_MANAGER.initialize(app.config['PLUGIN_PATHS'])
 
-    # todo: move to flask-manger (run only)
     # Start-up: loading (health-check) devices from database, caching
     from app.main.device_controller import init_devices
     init_devices()

@@ -302,7 +302,10 @@ def delete_sensor(device_id, sensor_id):
 @bp.route('/devices/<string:device_id>/scheduler', methods=['POST'])
 def device_run_scheduler(device_id):
     device_db = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
-    device_controller.run_scheduler(device_db)
+    try:
+        device_controller.run_scheduler(device_db)
+    except device_controller.ControllerError as e:
+        return f"{e}", 500
     return f"'{device_db.name}' executor started.", 200
 
 
@@ -322,5 +325,21 @@ def register_device():
 
 @bp.route('/devices/scan', methods=['POST'])
 def scan_devices():
+    """Performs scan for new (yet unrecognized) devices."""
     found_devices = device_controller.device_scan()
     return f"Scan complete, {len(found_devices)} found devices {found_devices}.", 200
+
+
+@bp.route('/devices/refresh', methods=['POST'])
+def refresh_devices():
+    """Performs the 'init' operation - iterates through DB stored devices and tries
+    to initialize them and store in cache (if not already there)."""
+    device_controller.init_devices()
+    return "Refresh done", 200
+
+
+@bp.route('/devices/<string:device_id>/refresh', methods=['POST'])
+def refresh_device(device_id):
+    device_db = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
+    device_controller.init_devices(devices=[device_db])
+    return "Refresh done", 200

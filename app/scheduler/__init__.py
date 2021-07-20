@@ -73,8 +73,7 @@ class Scheduler:
         task.runnable.run(self.device)
 
     def __stop_scheduler(self):
-        log.warning(f"{self}: no tasks received for quite some "
-                    "time, stopping scheduling...")
+        log.warning(f"{self}: no tasks received for quite some time, stopping scheduling...")
         self.executor.shutdown(wait=True)
         self.__running = False
         CACHE.remove_scheduler(self.device_uuid)

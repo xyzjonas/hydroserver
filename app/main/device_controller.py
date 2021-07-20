@@ -121,6 +121,8 @@ def run_scheduler(device: Device):
     if CACHE.has_active_scheduler(device.uuid):
         return
     physical_device = CACHE.get_active_device_by_uuid(device.uuid)
+    if not physical_device:
+        raise ControllerError(f"Scheduler couldn't be started, {device} not cached.")
     scheduler = Scheduler(physical_device)
     CACHE.add_scheduler(device.uuid, scheduler)
     scheduler.start()

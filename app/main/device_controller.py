@@ -51,7 +51,7 @@ def device_register(url):
     CACHE.add_active_device(device)
 
 
-def init_device(dev):
+def init_device(physical_device):
     """
     Create DB device object. Runs the first time the device is discovered.
      * Health check.
@@ -60,16 +60,17 @@ def init_device(dev):
      * ...commit
     """
 
-    status = dev.read_status()
+    status = physical_device.read_status()
     if status.is_success:
-        device = Device.from_status_response(dev, status.data)
+        device = Device.from_status_response(physical_device, status.data)
         db.session.add(device)
+        # Create the locked status task (if not yet present).
         if not Task.query.filter_by(device=device, name='status', cron='status').first():
             task = Task(name='status', cron='status', device=device,
                         type=TaskType.STATUS.value, locked=True)
             db.session.add(task)
         db.session.commit()
-        CACHE.add_active_device(dev)
+        CACHE.add_active_device(physical_device)
         return True
     return False
 
@@ -95,19 +96,28 @@ def device_scan():
     return found_devices
 
 
-def init_devices(devices=None):
+def refresh_devices(devices=None, strict=False):
     """Init (reconnect & cache) all devices found in the db."""
     if not devices:
         devices = Device.query.all()
-        log.info(f'Initializing devices ({len(devices)} found in the db).')
+        log.info(f'Initializing {len(devices)} devices found in the db).')
+
     for device in devices:
+        # 1) If cached, stop scheduling and remove.
         log.info(f'Initializing {device}')
         if CACHE.get_active_device_by_uuid(device.uuid):
-            log.debug(f'Already cached, skipping...')
-            continue
+            log.debug(f'Already cached, removing...')
+            if CACHE.has_active_scheduler(device.uuid):
+                CACHE.get_active_scheduler(device.uuid).terminate()
+                CACHE.remove_scheduler(device.uuid)
+            CACHE.remove_active_device(device)
+
+        # 2) Try to create the appropriate physical device object.
         try:
             type_ = DeviceType(device.type)
         except ValueError:
+            if strict:
+                raise ControllerError(f'Unrecognized device type: {device.type}')
             log.error(f'Unrecognized device type: {device.type}')
             continue
 
@@ -117,15 +127,27 @@ def init_devices(devices=None):
         elif type_ == DeviceType.WIFI:
             physical_device = WifiDevice(device.url)
         else:
+            if strict:
+                raise ControllerError(f'Unsupported device type: {type_}')
             log.error(f'Unsupported device type: {type_}')
             continue
-        status = physical_device.read_status(strict=False)
-        if not status.is_success:
-            log.error(f'Unreachable device: {physical_device}')
+
+        # 3) Health-check.
+        if not physical_device.health_check():
             device.is_online = False
             db.session.commit()
+            if strict:
+                raise ControllerError(f'Unreachable device: {physical_device}')
+            log.error(f'Unreachable device: {physical_device}')
             continue
+
+        # 4) Create the locked status task (if not yet present).
+        if not Task.query.filter_by(device=device, name='status', cron='status').first():
+            task = Task(name='status', cron='status', device=device,
+                        type=TaskType.STATUS.value, locked=True)
+            db.session.add(task)
+
         device.is_online = True
         db.session.commit()
         CACHE.add_active_device(physical_device)
-        run_scheduler(device.uuid)
+        # run_scheduler(device.uuid)

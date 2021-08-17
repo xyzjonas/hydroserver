@@ -4,10 +4,8 @@ from croniter import croniter, CroniterNotAlphaError, CroniterBadCronError
 from flask import jsonify, request
 
 from app.main import bp
-from app.main import device_controller
+from app.main import device_controller as controller
 from app.cache import CACHE
-# from app.main.device_controller import ControllerError, run_scheduler, \
-#     device_action, device_register, device_scan
 from app.models import db, Device, Task, Control, Sensor
 
 log = logging.getLogger(__name__)
@@ -198,7 +196,7 @@ def post_device_tasks(device_id):
     task_info = f"<id={task.id}name={task.name}>"
 
     if created:  # start up the scheduler for the device
-        device_controller.run_scheduler(device.uuid)
+        controller.run_scheduler(device.uuid)
     return (f"New task created: {task_info}", 201) if created \
         else (f"Task {task_info} modified: ", 200)
 
@@ -237,9 +235,9 @@ def device_action(device_id):
         name=data["control"], device=device_db) \
         .first_or_404(description=f"No such control {data['control']}")
     try:
-        device_controller.device_action(device_db, control)
+        controller.device_action(device_db, control)
         return f"{device_db.name}: '{control.name}' cmd success", 200
-    except device_controller.ControllerError as e:
+    except controller.ControllerError as e:
         return f"{device_db.name}: '{control.name}' cmd failed: {e}", 500
 
 
@@ -303,8 +301,8 @@ def delete_sensor(device_id, sensor_id):
 def device_run_scheduler(device_id):
     device_db = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
     try:
-        device_controller.run_scheduler(device_db.uuid)
-    except device_controller.ControllerError as e:
+        controller.run_scheduler(device_db.uuid)
+    except controller.ControllerError as e:
         return f"{e}", 500
     return f"'{device_db.name}' executor started.", 200
 
@@ -317,8 +315,8 @@ def register_device():
 
     url = data['url']
     try:
-        device_controller.device_register(url)
-    except device_controller.ControllerError as e:
+        controller.device_register(url)
+    except controller.ControllerError as e:
         return f"Device registration failed: {e}", 500
     return f"Device '{url}' registered", 201
 
@@ -326,20 +324,17 @@ def register_device():
 @bp.route('/devices/scan', methods=['POST'])
 def scan_devices():
     """Performs scan for new (yet unrecognized) devices."""
-    found_devices = device_controller.device_scan()
+    found_devices = controller.device_scan()
     return f"Scan complete, {len(found_devices)} found devices {found_devices}.", 200
-
-
-@bp.route('/devices/refresh', methods=['POST'])
-def refresh_devices():
-    """Performs the 'init' operation - iterates through DB stored devices and tries
-    to initialize them and store in cache (if not already there)."""
-    device_controller.init_devices()
-    return "Refresh done", 200
 
 
 @bp.route('/devices/<string:device_id>/refresh', methods=['POST'])
 def refresh_device(device_id):
+    """Performs the 'init' operation - iterates through DB stored devices and tries
+    to initialize them and store in cache (if not already there)."""
     device_db = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
-    device_controller.init_devices(devices=[device_db])
+    try:
+        controller.refresh_devices(devices=[device_db])
+    except controller.ControllerError as e:
+        return f'Failed to refresh: {e}', 500
     return "Refresh done", 200

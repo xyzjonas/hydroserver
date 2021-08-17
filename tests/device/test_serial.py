@@ -1,6 +1,6 @@
 import pytest
 
-from app.main.device_controller import init_devices
+from app.main.device_controller import refresh_devices
 from app.cache import CACHE
 from app.device import DeviceException
 from app.device.serial import SerialDevice
@@ -48,7 +48,7 @@ def test_init_from_db(actual_serial_device_and_db):
     device = actual_serial_device_and_db
     CACHE.clear_devices()
     assert not CACHE.get_active_device_by_uuid(device.uuid)
-    init_devices()
+    refresh_devices()
     assert CACHE.get_active_device_by_uuid(device.uuid)
 
 

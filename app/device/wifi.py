@@ -28,8 +28,7 @@ class WifiDevice(Device):
         if not self.is_site_online():
             self.__uuid = None
             return
-        response = self._parse_response(
-            self._send_raw(Command.STATUS.value))
+        response = self._parse_response(self._send_raw(Command.STATUS.value))
         if not response:
             self.__uuid = None
             return

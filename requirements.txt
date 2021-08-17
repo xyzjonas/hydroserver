@@ -23,3 +23,6 @@ six==1.16.0
 SQLAlchemy==1.4.21
 urllib3==1.26.6
 Werkzeug==2.0.1
+
+pytest~=6.2.4
+mock~=4.0.3

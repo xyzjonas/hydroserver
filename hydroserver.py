@@ -19,5 +19,5 @@ if 'run' in args:
     PLUGIN_MANAGER.initialize(app.config['PLUGIN_PATHS'])
 
     # Start-up: loading (health-check) devices from database, caching
-    from app.main.device_controller import init_devices
-    init_devices()
+    from app.main.device_controller import refresh_devices
+    refresh_devices()

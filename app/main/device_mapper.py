@@ -1,6 +1,7 @@
 from app import CACHE, db
 from app.device import Device
 from app.models import Device
+from app.device import Device as PhysicalDevice
 
 
 class DeviceMapper(object):
@@ -16,6 +17,17 @@ class DeviceMapper(object):
     @property
     def physical(self):
         return self._physical_device
+
+    @classmethod
+    def from_anything(cls, identifier):
+        if type(identifier) is str:
+            return cls.from_uuid(identifier)
+        if type(identifier) is Device:
+            return cls.from_model(identifier)
+        if issubclass(identifier.__class__, PhysicalDevice):
+            return cls.from_physical(identifier)
+        else:
+            raise TypeError(f"unknown type: {type(identifier)} for object {identifier}")
 
     @classmethod
     def from_uuid(cls, uuid: str):

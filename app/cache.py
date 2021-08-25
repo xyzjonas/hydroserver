@@ -17,7 +17,7 @@ class Cache:
             return list(self.__active_devices.values())
 
     def get_active_device(self, device):
-        self.get_active_device_by_uuid(self.__sanitize(device).uuid)
+        return self.get_active_device_by_uuid(self.__sanitize(device).uuid)
 
     def get_active_device_by_uuid(self, uuid):
         with self.lock:

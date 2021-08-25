@@ -6,8 +6,11 @@ from app.models import Task
 
 
 def test_post_task(app_setup, mocked_device, mocked_device_and_db):
+    """Test that posting a new task starts up the scheduler."""
+    CACHE.add_active_device(mocked_device)
     url = f"/devices/{mocked_device_and_db.id}/tasks"
     data = {"type": TaskType.STATUS.value}
+
     assert not CACHE.has_active_scheduler(mocked_device.uuid)
     with app_setup.test_client() as client:
         r = client.post(url, json=data)
@@ -17,6 +20,7 @@ def test_post_task(app_setup, mocked_device, mocked_device_and_db):
 
 
 def test_post_run_scheduler(app_setup, mocked_device, mocked_device_and_db):
+    CACHE.add_active_device(mocked_device)
     url = f"/devices/{mocked_device_and_db.id}/scheduler"
     assert not CACHE.has_active_scheduler(mocked_device.uuid)
     with app_setup.test_client() as client:

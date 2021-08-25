@@ -1,6 +1,7 @@
 import pytest
 
 from app.device.wifi import WifiDevice
+from app.device import StatusResponse
 
 
 @pytest.mark.parametrize("invalid_url", [
@@ -20,7 +21,11 @@ def test_init(actual_wifi_device):
 
 
 def test_read_status(actual_wifi_device):
-    r = actual_wifi_device.read_status(strict=False)
-    assert r.is_success
-    assert type(r.data) is dict
-    assert r.data
+    status = actual_wifi_device.read_status(strict=False)
+    assert status.is_success
+    assert type(status) is StatusResponse
+    assert type(status.data) is dict
+    assert status.data
+    assert status.data['uuid']
+    assert status.controls
+    assert status.sensors

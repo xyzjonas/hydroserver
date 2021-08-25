@@ -70,4 +70,4 @@ class PluginManager:
         return self._plugin_source
 
 
-PLUGIN_MANAGER = PluginManager()
+PLUGIN_MANAGER = PluginManager(init=True)

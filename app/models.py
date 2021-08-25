@@ -8,6 +8,7 @@ from sqlalchemy.orm import relationship
 from app import db
 from app.cache import CACHE
 from app.device import Device as PhysicalDevice
+from app.device import StatusResponse
 
 log = logging.getLogger(__name__)
 NOT_APPLICABLE = 'N/A'
@@ -33,6 +34,32 @@ class Base(db.Model):
                 result[attribute] = str(value)
         return result
 
+    @staticmethod
+    def parse_bool(value):
+        if type(value) is bool:
+            return value
+        if type(value) is str:
+            if value in ["True", "true"]:
+                return True
+            elif value in ["False", "false"]:
+                return False
+        else:
+            log.error(f"Invalid value '{value}' type {type(value)}, cannot cast to bool.")
+            raise TypeError(f'cannot cast {value} ({type(value)}) to bool')
+
+    @staticmethod
+    def parse_int(value):
+        if type(value) is int:
+            return value
+        if type(value) is str:
+            try:
+                return int(value)
+            except (TypeError, ValueError) as e:
+                log.error(f"Invalid value string '{value}', cannot cast to int, {e}")
+        else:
+            log.error(f"Invalid value '{value}' type {type(value)}, cannot cast to int.")
+            raise TypeError(f"Invalid value '{value}' type {type(value)}, cannot cast to int.")
+
 
 class Sensor(Base):
     """
@@ -57,7 +84,7 @@ class Sensor(Base):
     @last_value.setter
     def last_value(self, value):
         try:
-            self._last_value = float(value)
+            self._last_value = round(float(value))
         except Exception as e:
             log.error(f"{self}: failed to parse number '{value}': {e}")
             self._last_value = -1
@@ -75,7 +102,9 @@ class Control(Base):
     """
     name = db.Column(db.String(80), nullable=False)
     description = db.Column(db.String(80), nullable=True)
-    _state = db.Column(db.Boolean, default=False)
+    _state = db.Column(db.Boolean, default=False)  # deprecated
+    value = db.Column(db.String(80), default=NOT_APPLICABLE)
+    input = db.Column(db.String(80), nullable=True)
 
     device_id = db.Column(db.Integer, db.ForeignKey('device.id'), nullable=False)
     device = db.relationship('Device',
@@ -88,30 +117,23 @@ class Control(Base):
     def state(self):
         return self._state
 
-    @state.setter
-    def state(self, value):
-        if type(value) is bool:
-            self._state = value
-            return
-        if type(value) is str:
-            if value in ["True", "true"]:
-                self._state = True
-                return
-            elif value in ["False", "false"]:
-                self._state = False
-                return
-        try:
-            x = int(value)
-        except Exception as e:
-            log.error(f"{self}: failed to parse bool '{value}': {e}")
-            self._state = False
-            return
-        self._state = bool(x)
+    @property
+    def parsed_value(self):
+        return self.parse_value(self.value)
+
+    def parse_value(self, value):
+        """Return appropriate type of the value, based on 'input' attribute."""
+        if self.input == 'bool':
+            return self.parse_bool(value)
+        elif self.input == 'int':
+            return self.parse_int(value)
+        else:
+            return self.value
 
     @property
     def dictionary(self):
         d = self._to_dict()
-        d["state"] = self.state
+        d['value'] = self.parsed_value
         return d
 
 
@@ -212,6 +234,7 @@ class Device(Base):
     type = db.Column(db.String(80), nullable=True)
 
     is_online = db.Column(db.Boolean(), default=False)
+    scheduler_error = db.Column(db.String(80), nullable=True)
     # sensors (=backref)
     # controls (=backref)
     # tasks (=backref)
@@ -253,28 +276,48 @@ class Device(Base):
 
     def update_commands(self, data: dict):
         """Update sensor/control values according to a status dict"""
-        controls = [c.name for c in self.controls]
-        sensors = [s.name for s in self.sensors]
+
+        # todo: legacy remove!
+        controls_keys = [c.name for c in self.controls]
+        sensors_keys = [s.name for s in self.sensors]
         for key, value in data.items():
-            if key in controls:
+            # new style (JSON) of controls/sensors
+            if type(value) is dict and value.get('type') == 'control':
                 control = Control.query.filter_by(name=key, device=self).first()
-                if not controls:  # todo: necessary?
+                if not control:
+                    control = Control(name=key, description=key, device=self)
+                control.value = str(value.get('value')) or NOT_APPLICABLE
+                control.input = str(value.get('input'))
+
+            elif type(value) is dict and value.get('type') == 'sensor':
+                sensor = Sensor.query.filter_by(name=key, device=self).first()
+                if not sensor:
+                    sensor = Sensor(
+                        name=key,
+                        description=key,
+                        device=self,
+                        unit=value.get("unit", NOT_APPLICABLE)
+                    )
+                sensor.last_value = value.get('value')
+
+            # todo: legacy remove!
+            elif key in controls_keys:
+                control = Control.query.filter_by(name=key, device=self).first()
+                if not controls_keys:  # todo: necessary?
                     raise UnexpectedModelException("Key was in controls, but query failed.")
-                control.state = value
-            elif key in sensors:
+                control.value = str(value)
+            # todo: legacy remove!
+            elif key in sensors_keys:
                 sensor = Sensor.query.filter_by(name=key, device=self).first()
                 if not sensor:  # todo: necessary?
                     raise UnexpectedModelException("Key was in controls, but query failed.")
                 sensor.last_value = value
 
-            elif getattr(self, key, None):
-                # skip received device attributes
-                continue
             else:
                 self.put_unknown_command(key, value)
 
     @classmethod
-    def from_status_response(cls, device: PhysicalDevice, status: dict, create=True):
+    def from_status_response(cls, device: PhysicalDevice, status: StatusResponse, create=True):
         d = Device.query.filter_by(uuid=device.uuid).first()
         if not d and create:
             d = Device(uuid=device.uuid,
@@ -282,9 +325,9 @@ class Device(Base):
                        type=device.device_type.value,
                        url=device.url)
             db.session.add(d)
-            db.session.commit()
         if d:
-            d.update_commands(status)
+            d.update_commands(status.controls)
+            d.update_commands(status.sensors)
             d.is_online = True
             d.last_seen_online = datetime.utcnow()
         return d

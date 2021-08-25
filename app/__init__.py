@@ -34,6 +34,8 @@ def create_app(config_class=Config):
 
     CORS(app, resources={r'/*': {'origins': '*'}})
 
+
+
     return app
 
 

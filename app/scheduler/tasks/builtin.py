@@ -1,10 +1,12 @@
 from app import db
 from app.device import Device as PhysicalDevice
+from app.main.device_controller import Controller
 from app.models import Task, Device
 from app.scheduler.tasks import TaskRunnable, TaskType, TaskNotCreatedException, TaskException
 
 
 class Interval(TaskRunnable):
+    """Toggles the control based on a sensors value (tries to keep it inside the interval)."""
     type = TaskType.INTERVAL  # todo: needed?
 
     @staticmethod
@@ -43,54 +45,43 @@ class Interval(TaskRunnable):
 
         response = device.read_sensor(sensor.name)
         if not response.is_success:
-            raise TaskException(f"{device}: invalid response '{response}'")
+            raise TaskException(f"{device}: failed to read sensor {sensor.name}: {response}")
         value = response.data
 
-        def toggle(dev, c):
-            r = dev.send_control(c.name)
-            c.state = r.data
-            db.session.commit()
-            self.log.info(f"{dev}: {c} toggled.")
+        controller = Controller(device)
 
         if value < self.interval[0] and not control.state:
             self.log.info(f"{device}: {value} < {self.interval[0]}, switching on.")
-            toggle(device, control)
+            controller.action(control)
 
         if value > self.interval[1] and control.state:
             self.log.info(f"{device}: {value} > {self.interval[1]}, switching off.")
-            toggle(device, control)
+            controller.action(control)
         return True
 
 
 class Status(TaskRunnable):
+    """Just read the status & update."""
     type = TaskType.STATUS
 
     @TaskRunnable.update_task_status()
     def run(self, device: PhysicalDevice):
-        response = device.read_status()
-
-        d = Device.from_status_response(device, response.data)
-        if not response.is_success:
-            d.is_online = False
-        db.session.add(d)
-        db.session.commit()
+        Controller(device=device).read_status()
         return True
 
 
 class Toggle(TaskRunnable):
+    """Toggle a switch."""
     type = TaskType.TOGGLE
 
     def __init__(self, task_id: int):
         super().__init__(task_id)
-        task = Task.query.filter_by(id=task_id).first()
-        if not task.control:
+        self.task = Task.query.filter_by(id=task_id).first()
+        if not self.task.control:
             raise TaskNotCreatedException(f"Control needed for '{self.type}' task.")
 
     @TaskRunnable.update_task_status()
     def run(self, device: PhysicalDevice):
-        control = Task.query.filter_by(id=self.task_id).first().control
-        response = device.send_control(control.name)
-        control.state = response.data
-        db.session.add(control)
-        db.session.commit()
-        return response.is_success
+        control = self.task.control
+        Controller(device=device).action(control)
+        return True

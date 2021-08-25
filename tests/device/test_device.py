@@ -2,18 +2,21 @@ import mock
 import pytest
 
 from app.main.device_controller import init_device
-from app.device import DeviceException, DeviceResponse
+from app.device import DeviceException, DeviceCommunicationException, DeviceResponse
 from app.device import mock, Status
 from app.device.serial import SerialDevice
 from app.device.wifi import WifiDevice
 from app.main.device_mapper import DeviceMapper
-from app.models import Device
+
 
 DEVICES = [
     WifiDevice(url="http://invalid-url/and/some/path"),
     SerialDevice(port="/dev/ttyUSB999", baud=19200)
 ]
-DEVICES_IDS = ["wifi", "serial"]
+DEVICES_IDS = [
+    "wifi",
+    "serial"
+]
 
 
 def test_init_device(db_setup):
@@ -43,8 +46,9 @@ def test_read_status_non_existent_device(device):
 @pytest.mark.parametrize("command", [None, 123, 1.0, "", "bollocks"])
 @pytest.mark.parametrize("device", DEVICES, ids=DEVICES_IDS)
 def test_send_command_negative(device, command):
-    """Whatever gets sent, we receive an empty dict"""
-    assert device.send_command(command) == {}
+    """Whatever gets sent, exception is raised"""
+    with pytest.raises(DeviceCommunicationException):
+        device.send_command(command)
 
 
 @pytest.mark.xfail

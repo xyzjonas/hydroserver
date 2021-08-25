@@ -1,21 +1,60 @@
 import uuid
 
-from app.device import Device
+from app.device import Device, DeviceType, Command
 
 
 class MockedDevice(Device):
 
-    def __init__(self):
-        self.__uuid = str(uuid.uuid1())
+    device_type = DeviceType.MOCK
+
+    def __init__(self, uid=None):
+        if uid:
+            self.__uuid = uid
+        else:
+            self.__uuid = str(uuid.uuid1())
         self.toggle = False
 
         super().__init__()
 
+    @classmethod
+    def from_model(cls, device_model):
+        return cls(uid=device_model.uuid)
+
     def _get_uuid(self):
         return self.__uuid
 
-    def _send_raw(self, string):
-        return f"status:ok,temp:23.1,hum:50,switch_01:{'1' if self.toggle else '0'}"
+    def _send_raw(self, data):
+        if data.get('request') and data.get("request").startswith(Command.SENSOR.value):
+            return {
+                'status': 'ok',
+                'value': 23.1
+            }
+
+        if data.get('request') and data.get("request").startswith(Command.CONTROL.value):
+            return {
+                'status': 'ok',
+                'value': self.toggle
+            }
+
+        return {
+            "status": "ok",
+            "uuid": self._get_uuid(),
+            "temp": {
+                "type": "sensor",
+                "unit": "°C",
+                "value": 23.1,
+            },
+            "hum": {
+                "type": "sensor",
+                "unit": "%",
+                "value": 50.1,
+            },
+            "switch_01":  {
+                "type": "control",
+                "input": "bool",
+                "value": self.toggle
+            }
+        }
 
     def _init(self):
         super()._init()
@@ -29,7 +68,7 @@ class MockedDevice(Device):
     def _get_url(self):
         return f"mocked://{self.uuid}"
 
-    def send_control(self, control: str, strict=True):
+    def send_control(self, control: str, value=None, strict=True):
         self.toggle = not self.toggle
         return super().send_control(control, strict)
 
@@ -43,4 +82,3 @@ class MockedDevice(Device):
 
 def scan(num=1):
     return [MockedDevice() for _ in range(num)]
-

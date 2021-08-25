@@ -1,9 +1,10 @@
+import json
 import logging
 import threading
 
 import requests
 
-from app.device import Device, DeviceType, Command
+from app.device import Device, DeviceType, Command, DeviceCommunicationException
 
 log = logging.getLogger(__name__)
 
@@ -16,7 +17,7 @@ class WifiDevice(Device):
         self.__url = url
         self.lock = threading.Lock()
         self.__uuid = None
-        super().__init__()
+        super(WifiDevice, self).__init__()
 
     def _get_uuid(self):
         return self.__uuid
@@ -25,14 +26,23 @@ class WifiDevice(Device):
         return self.__url
 
     def _init(self):
+        # 1) network issues - unreachable
         if not self.is_site_online():
             self.__uuid = None
             return
-        response = self._parse_response(self._send_raw(Command.STATUS.value))
-        if not response:
+
+        # 2) online, but communication issues
+        try:
+            response_dict = self._send_raw(self._simple_request(Command.STATUS))
+        except DeviceCommunicationException:
             self.__uuid = None
             return
-        uuid = response.get('uuid')
+
+        # 3) malformed data received
+        if not response_dict:
+            self.__uuid = None
+            return
+        uuid = response_dict.get('uuid')
         if not uuid:
             log.warning(f"{self}: device response doesn't contain a uuid.")
             self.__uuid = None
@@ -47,20 +57,25 @@ class WifiDevice(Device):
             return False
 
     # [!] one and only send method
-    def _send_raw(self, string):
-        data = {
-            'request': string
-        }
+    def _send_raw(self, request_dict):
         try:
-            response = requests.post(self.url, json=data)
-        except requests.RequestException:
+            response = requests.post(self.url, json=request_dict)
+        except requests.RequestException as e:
             self.__uuid = None
-            return None
+            raise DeviceCommunicationException(e)
         if response.status_code >= 300:
             self.__uuid = None
+            raise DeviceCommunicationException(f"{self}: server response > 300.")
 
-        return ",".join([f"{k}:{v}"
-                         for k, v in response.json().items()])
+        # item values can be further dicts encoded as string...
+        response_dict = response.json()
+        for k, v in response_dict.items():
+            try:
+                response_dict[k] = json.loads(v)
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        return response_dict
 
     def _is_connected(self):
         return self.is_site_online()

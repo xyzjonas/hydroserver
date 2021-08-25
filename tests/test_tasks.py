@@ -1,6 +1,6 @@
 import pytest
 
-from app import db
+from app import db, CACHE
 from app.models import Task, Sensor, Control
 from app.scheduler.tasks import ScheduledTask, TaskType, TaskNotCreatedException, TaskRunnable
 from app.scheduler.tasks.builtin import Status, Toggle, Interval
@@ -53,6 +53,7 @@ def test_runnable_from_database_task_negative(mocked_device_and_db, task_factory
 
 
 def test_toggle(mocked_device, mocked_device_with_sensor_and_control, task_factory):
+    CACHE.add_active_device(mocked_device)
     device, sensor, control = mocked_device_with_sensor_and_control
     t = task_factory(device, TaskType.TOGGLE.value, control=control)
 

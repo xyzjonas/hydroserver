@@ -5,7 +5,7 @@ from app.config import TestConfig
 from app.device import serial, mock, wifi
 from app.main.device_controller import init_device
 from app.main.device_mapper import DeviceMapper
-from app.models import Control, Sensor, Task
+from app.models import Control, Sensor, Task, Device
 from tests.constants import WIFI_DEVICE
 
 
@@ -30,16 +30,23 @@ def db_setup():
 
 
 # MOCKED
-@pytest.fixture()
+@pytest.fixture
 def mocked_device():
     return mock.MockedDevice()
 
 
 @pytest.fixture()
 def mocked_device_and_db(mocked_device, db_setup):
-    init_device(mocked_device)
-    device = DeviceMapper.from_physical(mocked_device).model
-    return device
+    # init_device(mocked_device)
+    dev = Device(
+        name="mocked-" + mocked_device.uuid,
+        uuid=mocked_device.uuid,
+        type=mocked_device.device_type.value
+    )
+    db.session.add(dev)
+    db.session.commit()
+    dev = Device.query.get(dev.id)
+    return dev
 
 
 @pytest.fixture()

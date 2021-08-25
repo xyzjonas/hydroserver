@@ -11,7 +11,8 @@ from app import db
 from app.cache import CACHE
 from app.device import Device as PhysicalDevice
 from app.main.device_mapper import DeviceMapper
-from app.scheduler.tasks import ScheduledTask, TaskException, TaskNotCreatedException
+# from app.scheduler.tasks import ScheduledTask, TaskException, TaskNotCreatedException
+from app.scheduler.tasks import ScheduledTask, TaskNotCreatedException
 
 log = logging.getLogger(__name__)
 
@@ -22,11 +23,20 @@ class Scheduler:
     Creates schedule based on set up tasks and their crons.
     """
 
-    def __init__(self, device: PhysicalDevice):
+    def __init__(self,
+                 device: PhysicalDevice,
+                 device_offline_callback,
+                 scheduler_error_callback,
+                 # load_tasks_from_db_fn=None,
+                 ):
         self.device = device
         self.device_uuid = self.device.uuid
         self.__running = False
         self.__should_be_running = False
+
+        self._device_offline_callback = device_offline_callback
+        self._scheduler_error_callback = scheduler_error_callback
+        # self._get_tasks_from_db = load_tasks_from_db_fn
 
         with current_app.app_context():
             self.MAX_WORKERS = current_app.config['MAX_WORKERS']
@@ -40,7 +50,9 @@ class Scheduler:
     def __repr__(self):
         return f"<Scheduler (device={self.device}, running={self.__running})>"
 
-    def start(self):
+    def start(self,
+
+              ):
         if self.is_running:
             return
         self.__should_be_running = True
@@ -49,9 +61,11 @@ class Scheduler:
             try:
                 self.__loop()
             except Exception as e:
+                # unexpected exceptions
                 log.fatal(f"{self}: [!!!] scheduler FAILED: \n{e}")
                 self.__running = False
                 self.__should_be_running = False
+                self._scheduler_error_callback(cause=str(e))
 
         t = threading.Thread(target=try_run)
         t.daemon = True
@@ -65,7 +79,21 @@ class Scheduler:
         return self.__running
 
     def get_tasks_from_db(self):
-        return self.__load_tasks_from_db(self.device)
+        """
+        :rtype: set
+        """
+        dev = DeviceMapper.from_uuid(self.device_uuid).model
+
+        def __sanitize(task):
+            try:
+                return ScheduledTask.from_db_object(task)
+            except TaskNotCreatedException as e:
+                task.last_run = datetime.utcnow()
+                task.last_run_success = False
+                task.last_run_error = str(e)
+                db.session.commit()
+
+        return {task for task in [__sanitize(t) for t in dev.tasks] if task}
 
     def __execute(self, task):
         """execute function to be spawned in the thread executor"""
@@ -91,7 +119,7 @@ class Scheduler:
         while self.__should_be_running:
             # 1) Health-check
             if not self.device.health_check():
-                self.__set_is_offline(self.device_uuid)
+                self._device_offline_callback()
                 attempts += 1
                 if attempts > self.RECONNECT_ATTEMPTS:
                     log.warning(f"{self}: device offline, stopping scheduling...")
@@ -105,7 +133,7 @@ class Scheduler:
                             f"(attempts={attempts}/{self.RECONNECT_ATTEMPTS}).")
             else:
                 attempts = 0
-                to_be_scheduled = self.__load_tasks_from_db(self.device) \
+                to_be_scheduled = self.get_tasks_from_db() \
                     .difference(self.__last_executed)
 
             # 2) handle tasks
@@ -132,6 +160,7 @@ class Scheduler:
                 no_task_retry_limit += 1
                 if no_task_retry_limit > self.RECONNECT_ATTEMPTS:
                     self.__stop_scheduler()
+                    self._scheduler_error_callback(cause="No scheduled tasks.")
                     return
 
             # 3) Time delta shenanigans
@@ -146,24 +175,25 @@ class Scheduler:
             time.sleep(sleep_secs if sleep_secs > 0 else 0.01)
 
         # end WHILE
+        self.executor.shutdown(wait=True)
         log.info(f"{self} exiting...")
         self.__running = False
 
-    @staticmethod
-    def __load_tasks_from_db(serial_device):
-        def __sanitize(task):
-            try:
-                return ScheduledTask.from_db_object(task)
-            except TaskNotCreatedException as e:
-                task.last_run = datetime.utcnow()
-                task.last_run_success = False
-                task.last_run_error = str(e)
-                db.session.commit()
-
-        device = DeviceMapper.from_physical(serial_device).model
-        return {task for task in [__sanitize(t) for t in device.tasks] if task}
-
-    @staticmethod
-    def __set_is_offline(device_uuid):
-        DeviceMapper.from_uuid(device_uuid).model.is_online = False
-        db.session.commit()
+    # @staticmethod
+    # def __load_tasks_from_db(serial_device):
+    #     def __sanitize(task):
+    #         try:
+    #             return ScheduledTask.from_db_object(task)
+    #         except TaskNotCreatedException as e:
+    #             task.last_run = datetime.utcnow()
+    #             task.last_run_success = False
+    #             task.last_run_error = str(e)
+    #             db.session.commit()
+    #
+    #     device = DeviceMapper.from_physical(serial_device).model
+    #     return {task for task in [__sanitize(t) for t in device.tasks] if task}
+    #
+    # @staticmethod
+    # def __set_is_offline(device_uuid):
+    #     DeviceMapper.from_uuid(device_uuid).model.is_online = False
+    #     db.session.commit()

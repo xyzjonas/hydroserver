@@ -14,6 +14,9 @@ class Command(Enum):
     CONTROL = Config.PRECONFIGURED_COMMAND["control_prefix"]
     SENSOR = Config.PRECONFIGURED_COMMAND["sensor_prefix"]
 
+    def __str__(self):
+        return self.value
+
 
 class DeviceType(Enum):
     SERIAL = "serial"
@@ -21,6 +24,7 @@ class DeviceType(Enum):
     ZIGBEE = "zigbee"
     BLUETOOTH = "bluetooth"
     GENERIC = "generic"
+    MOCK = "mock"
     # ...
 
 
@@ -42,8 +46,14 @@ class DeviceException(Exception):
     pass
 
 
-class DeviceResponse:
+class DeviceCommunicationException(DeviceException):
+    """Raise when there is something wrong with the device,
+    e.g. malformed data, filed connection, ..."""
+    pass
 
+
+class DeviceResponse:
+    """Generic response object. Pops-out status item, everything else is dict."""
     def __init__(self, status, data=None):
         self.status = status
         self.data = data
@@ -51,26 +61,96 @@ class DeviceResponse:
     def __repr__(self):
         return f"<DeviceResponse (status={self.status}, data={self.data})>"
 
+    def __getitem__(self, key):
+        return self.data[key]
+
+    def get(self, key, default=None):
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
     @property
     def is_success(self):
         return self.status == Status.OK
 
     @classmethod
-    def from_response_data(cls, data, extract_field=None):
+    def from_response_data(cls, data):
         if type(data) is not dict:
-            status = Status.NO_DATA
-        else:
-            status = Status.from_string(data.pop("status", None))
-        if extract_field:
-            if not data.get(extract_field):
-                raise DeviceException(
-                    f"Response does not contain '{extract_field}' field.")
-            data = data.get(extract_field)
+            return DeviceResponse(Status.NO_DATA, data)
 
+        status = Status.from_string(data.pop("status", None))
         return DeviceResponse(status, data)
 
 
-class Device:
+class SensorResponse(DeviceResponse):
+    """Sensor/Control 'get' object. Data should contain 'value' key."""
+    def __init__(self, status, data=None):
+        super(SensorResponse, self).__init__(status, data)
+        if "value" not in data:
+            raise DeviceCommunicationException(f"Received response '{data}' is missing 'value'.")
+
+    @property
+    def value(self):
+        return self.data['value']
+
+    @classmethod
+    def from_response_data(cls, data):
+        response = DeviceResponse.from_response_data(data)
+        return cls(response.status, response.data)
+
+
+class StatusResponse(DeviceResponse):
+    """Status response object.
+    Should contain everything, informational as well as sensors, controls."""
+
+    # non-control/sensor fields
+    # todo: configurable?
+    info_fields = ['status', 'uuid']
+
+    def __init__(self, status, data=None):
+        super(StatusResponse, self).__init__(status, data)
+        self._controls = None
+        self._sensors = None
+
+    @staticmethod
+    def __is_control(item):
+        try:
+            x = item.get("type") == "control"
+            return x
+        except (AttributeError, KeyError):
+            return False
+
+    @staticmethod
+    def __is_sensor(item):
+        try:
+            return item.get("type") == "sensor"
+        except (AttributeError, KeyError):
+            return False
+
+    @property
+    def controls(self):
+        if not self._controls:
+            controls = {k: v for k, v in self.data.items() if k not in self.info_fields}
+            controls = {k: v for k, v in controls.items() if self.__is_control(v)}
+            self._controls = controls
+        return self._controls
+
+    @property
+    def sensors(self):
+        if not self._sensors:
+            sensors = {k: v for k, v in self.data.items() if k not in self.info_fields}
+            sensors = {k: v for k, v in sensors.items() if self.__is_sensor(v)}
+            self._sensors = sensors
+        return self._sensors
+
+    @classmethod
+    def from_response_data(cls, data):
+        response = DeviceResponse.from_response_data(data)
+        return cls(response.status, response.data)
+
+
+class Device(object):
     """
     To implement:
 
@@ -90,14 +170,14 @@ class Device:
         return f"<{self.__class__.__name__} (type={self.device_type.value})>"
 
     # to be overridden
-    def _send_raw(self, string):
+    def _send_raw(self, data):
         """
         Per device type send/receive implementation.
         (!) responsible for changing device state in case of connection issues.
 
-        :param str string: raw string to be sent
-        :return: raw string (decoded) response
-        :rtype: str
+        :param dict data: request data
+        :return: response dictionary
+        :rtype: dict
         """
         pass
 
@@ -144,57 +224,57 @@ class Device:
 
     def ensure_connectivity(self):
         """If device is not responding, try to initialize it."""
-        if not self.is_responding:
-            log.warning(f"{self} is not connected")
-            self._parse_response(self._send_raw(Command.STATUS.value))
-            if not self.is_responding:
-                log.error(f"{self}: reconnect failed: "
-                          f"connected={self.is_connected}, responding={self.is_responding}")
-                return False
-        return True
+        try:
+            log.debug(f"Ensuring connectivity: {self}")
+            self._send_raw(self._simple_request(Command.STATUS))
+            return True
+        except DeviceException:
+            return False
 
-    def send_command(self, command, retries=2):
+    def send_command(self, request_data, retries=2):
         """
-        SEND a generic string command
+        public wrapper for _send_raw() with retry mechanism.
+
+        :param request_data: data to be sent
+        :param in retries: number of retries
         :rtype: dict
         """
-        cmd = str(command)
-        log.debug(f"{self}: sending command '{cmd}'")
-        data = self._parse_response(self._send_raw(cmd))
+        # fallback to string-only requests
+        if type(request_data) is not dict:
+            request_data = self._simple_request(str(request_data))
 
-        # retry
-        if not data:
+        try:
+            return self._send_raw(request_data)
+        except DeviceCommunicationException:
             for i in range(retries):
                 if self.ensure_connectivity():
-                    data = self._parse_response(self._send_raw(cmd))
-                    if data:
-                        break
-
-        log.debug(f"{self}: received '{data}'")
-        return data
+                    try:
+                        response_dict = self._send_raw(request_data)
+                        if response_dict:
+                            return response_dict
+                    except DeviceException:
+                        pass
+            raise
 
     def read_status(self, strict=True):
         """
         READ full device status (expecting dev info + sensors/controls values
-        :rtype: DeviceResponse
+        :rtype: StatusResponse
         """
-        response = DeviceResponse.from_response_data(
-            self.send_command(Command.STATUS.value))
-
-        if not response.is_success and strict:
-            raise DeviceException(
-                f"{self}: status read failed '{response}'")
-
-        return response
+        received = self.send_command(Command.STATUS.value)
+        try:
+            return StatusResponse.from_response_data(received)
+        except DeviceCommunicationException as e:
+            raise DeviceException("Unexpected error while reading status.", e)
 
     def read_sensor(self, sensor: str, strict=True):
         """
         READ a sensor value and return number
         :rtype: DeviceResponse
         """
+        # raise NotImplementedError("Read sensor not implemented yet, sorry.")
         cmd = f"{Command.SENSOR.value}{sensor}"
-        response = DeviceResponse.from_response_data(
-            self.send_command(cmd), extract_field=sensor)
+        response = DeviceResponse.from_response_data(self.send_command(cmd))
 
         if not response.is_success and strict:
             raise DeviceException(
@@ -202,30 +282,29 @@ class Device:
 
         try:
             # fixme: response TYPES!
-            response.data = float(response.data)
+            response.data = response.data.get("value")
         except (TypeError, ValueError):
             if strict:
                 raise DeviceException(
                     f"{self}: received value '{response.data}' is not a number")
-
         return response
 
-    def send_control(self, control: str, strict=True):
+    def send_control(self, control: str, value=None, strict=True):
         """
         SEND a control command
-        :rtype: DeviceResponse
+        :rtype: SensorResponse
         """
-        cmd = f"{Command.CONTROL.value}{control}"
-        response = DeviceResponse.from_response_data(
-            self.send_command(cmd), extract_field=control)
+        command_name = f"{Command.CONTROL.value}{control}"
+        request = {
+            'request': command_name,
+        }
+        if value:
+            request['value'] = value
 
-        if not response.is_success and strict:
-            raise DeviceException(
-                f"{self}: '{control}' control failed '{response}'")
-
-        if response.data is None and strict:
-            raise DeviceException(f"{self}: no response value '{response}'")
-        return response
+        try:
+            return SensorResponse.from_response_data(self.send_command(request))
+        except DeviceException as e:
+            raise DeviceException("Unexpected error while sending control cmd.", e)
 
     def health_check(self):
         if self.is_responding:
@@ -243,23 +322,8 @@ class Device:
         return False
 
     @staticmethod
-    def _parse_response(response_string):
-        """
-        parsing method, by default expects colon separated 'x:y' tuples
-        :rtype: dict
-        """
-        data = {}
-        if response_string:
-            for item in response_string.split(","):
-                if len(item.split(":")) != 2:
-                    continue
-                key, value = item.split(":")
-                if not key:
-                    continue
-                if not value:
-                    value = None
-                data[key] = value
-        return data
+    def _simple_request(string_requst):
+        return {'request': str(string_requst)}
 
 
 from app.device.serial import scan as serial_scan

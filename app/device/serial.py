@@ -9,7 +9,7 @@ import time
 from serial import Serial, SerialException
 
 from app import Config
-from app.device import Device, DeviceType, DeviceException, Command
+from app.device import Device, DeviceType, DeviceException, DeviceCommunicationException,  Command
 
 log = logging.getLogger(__name__)
 
@@ -47,7 +47,11 @@ class SerialDevice(Device):
         self.lock = threading.Lock()
         self.serial = None
         self.__uuid = None
-        super(SerialDevice, self).__init__()
+        try:
+            super(SerialDevice, self).__init__()
+        except DeviceCommunicationException:
+            # do nothing, _send_raw 'marked' this object as unresponsive already.
+            pass
 
     def _get_uuid(self):
         return self.__uuid
@@ -70,48 +74,49 @@ class SerialDevice(Device):
             self.serial = Serial(self.port, self.baud, timeout=self.TIMEOUT)
             time.sleep(2)  # serial takes time to be ready to receive
 
-            device_info = self._parse_response(
-                self._send_raw(Command.STATUS.value))
+            device_info = self._send_raw(self._simple_request(Command.STATUS))
             if device_info:
                 if "uuid" in device_info:
                     self.__uuid = device_info['uuid']
                 else:
-                    log.error("Device info received, but without UUID field")
+                    raise DeviceCommunicationException(
+                        "Device info received, but without UUID field")
             else:
-                log.error("Device info not received.")
+                raise DeviceCommunicationException("Device info not received.")
+
         except (FileNotFoundError, SerialException, ValueError) as e:
             log.error("Failed to open serial connection: {}".format(e))
             self.serial = None
+            raise DeviceCommunicationException("Failed to open serial connection.", e)
 
     # [!] one and only send method
-    def _send_raw(self, command):
+    def _send_raw(self, request_dict):
         if not self.serial:
-            return
+            raise DeviceCommunicationException("Serial is None. Connection wasn't initialized"
+                                               "or was broken.")
         with self.lock:
             try:
                 self.serial.flush()
-                data = {
-                    'request': command
-                }
-                to_write = json.dumps(data).encode('utf-8')
+                to_write = json.dumps(request_dict).encode('utf-8')
                 self.serial.write(to_write)
                 time.sleep(self.WAIT_FOR_RESPONSE)
                 response = self.serial.readline().decode("utf-8").rstrip()
                 if not response:
                     self.__uuid = None
-                    log.warning(
-                        "{}: response for '{}' not received..".format(self, command))
+                    raise DeviceCommunicationException(
+                        "{}: response for '{}' not received..".format(self, request_dict))
 
-                response_json = json.loads(response)
-                return ",".join([f"{k}:{v}" for k, v in response_json.items()])
+                return json.loads(response)
             except SerialException as e:
                 log.warning(e)
                 self.__uuid = None
                 self.serial = None
+                raise DeviceCommunicationException(e)
             except termios.error as e:
                 log.fatal("{}: device got probably disconnected".format(e))
                 self.__uuid = None
                 self.serial = None
+                raise DeviceCommunicationException("Device got probably disconnected.", e)
 
     def reset_serial(self):
         self.serial = None

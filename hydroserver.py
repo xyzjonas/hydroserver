@@ -20,4 +20,4 @@ if 'run' in args:
 
     # Start-up: loading (health-check) devices from database, caching
     from app.main.device_controller import refresh_devices
-    refresh_devices()
+    refresh_devices(strict=False)

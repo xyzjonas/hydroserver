@@ -1,8 +1,17 @@
 import time
 
+from app.main.device_controller import *
 from app.cache import CACHE
 from app.scheduler.tasks import TaskType
 from app.models import Task
+
+
+def test_get_devices(db_setup, app_setup, mocked_device):
+    init_device(mocked_device)
+    url = "/devices"
+    with app_setup.test_client() as client:
+        r = client.get(url)
+        assert r.status_code == 200
 
 
 def test_post_task(app_setup, mocked_device, mocked_device_and_db):

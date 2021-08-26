@@ -27,7 +27,10 @@ def create_app(config_class=Config):
     db.app = app  # global db
 
     # flask migrate
-    migrate.init_app(app, db)
+    if db.engine.url.drivername == 'sqlite':
+        migrate.init_app(app, db, render_as_batch=True)
+    else:
+        migrate.init_app(app, db)
 
     from app.main import bp as main_bp
     app.register_blueprint(main_bp)

@@ -43,9 +43,7 @@ class Base(db.Model):
                 return True
             elif value in ["False", "false"]:
                 return False
-        else:
-            log.error(f"Invalid value '{value}' type {type(value)}, cannot cast to bool.")
-            raise TypeError(f'cannot cast {value} ({type(value)}) to bool')
+        raise TypeError(f'\'bool\' cast failed for value {value}')
 
     @staticmethod
     def parse_int(value):
@@ -55,10 +53,19 @@ class Base(db.Model):
             try:
                 return int(value)
             except (TypeError, ValueError) as e:
-                log.error(f"Invalid value string '{value}', cannot cast to int, {e}")
-        else:
-            log.error(f"Invalid value '{value}' type {type(value)}, cannot cast to int.")
-            raise TypeError(f"Invalid value '{value}' type {type(value)}, cannot cast to int.")
+                pass
+        raise TypeError(f'\'int\' cast failed for value {value}')
+
+    @staticmethod
+    def parse_float(value):
+        if type(value) in [int, float]:
+            return round(float(value), 2)
+        if type(value) is str:
+            try:
+                return round(float(value), 2)
+            except (TypeError, ValueError) as e:
+                pass
+        raise TypeError(f'\'float\' cast failed for value {value}')
 
 
 class Sensor(Base):
@@ -67,11 +74,13 @@ class Sensor(Base):
     """
     name = db.Column(db.String(80), nullable=False)
     description = db.Column(db.String(80), nullable=True)
-    _last_value = db.Column(db.Float, default=-1)
+    _value = db.Column(db.String(80), default='-1')
     unit = db.Column(db.String(80), nullable=True)
 
     device_id = db.Column(db.Integer, db.ForeignKey('device.id'), nullable=False)
-    device = db.relationship('Device', backref=db.backref('sensors', lazy=False, cascade='all, delete-orphan'))
+    device = db.relationship('Device',
+                             backref=db.backref(
+                                 'sensors', lazy=False, cascade='all, delete-orphan'))
 
     def __repr__(self):
         return f"<Sensor (name={self.name}, value={self.last_value} {self.unit}," \
@@ -79,20 +88,45 @@ class Sensor(Base):
 
     @property
     def last_value(self):
-        return self._last_value
+        """return typed value, bool"""
+        try:
+            return self.parse_bool(self._value)
+        except TypeError:
+            pass
+
+        try:
+            return self.parse_float(self._value)
+        except TypeError:
+            pass
+
+        return self._value
 
     @last_value.setter
     def last_value(self, value):
+        """Tries to parse and store float and bool, otherwise raises TypeError."""
         try:
-            self._last_value = round(float(value))
-        except Exception as e:
-            log.error(f"{self}: failed to parse number '{value}': {e}")
-            self._last_value = -1
+            value = self.parse_bool(value)
+        except TypeError:
+            pass
+
+        try:
+            value = self.parse_float(value)
+        except TypeError:
+            pass
+
+        if type(value) not in [bool, int, float]:
+            raise TypeError(f"Cannot store '{type(value)}' as sensor value.")
+        self._value = str(value)
+
+    @property
+    def value_type(self):
+        return str(type(self.last_value))
 
     @property
     def dictionary(self):
         d = self._to_dict()
         d['last_value'] = self.last_value
+        d['type'] = self.value_type
         return d
 
 

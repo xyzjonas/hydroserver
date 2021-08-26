@@ -1,5 +1,6 @@
 import logging
 import math
+import traceback
 from contextlib import wraps
 from datetime import datetime
 from enum import Enum
@@ -129,6 +130,7 @@ class TaskRunnable:
                     else:
                         Task.set_failed(task_id, "No errors, wrapped function returned 'False'")
                 except Exception as e:
+                    traceback.print_exc()
                     if task_id:
                         Task.set_failed(task_id, e)
                     else:

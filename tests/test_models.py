@@ -63,3 +63,51 @@ def test_dictionary(task):
     assert dictionary.get("meta") == meta
     assert dictionary.get("name") == name
     assert dictionary.get("last_run") == str(date)
+
+
+@pytest.mark.parametrize("value_expected_type", [
+    ("1", 1, float),
+    ("0", 0, float),
+    (".1", 0.1, float),
+    ("-0.1", -0.1, float),
+    ("1.23", 1.23, float),
+    ("9.99999999999999999999999999999999999999999999",
+     9.99999999999999999999999999999999999999999999, float),
+    ("true", True, bool),
+    ("True", True, bool),
+    ("false", False, bool),
+    ("False", False, bool),
+])
+def test_get_sensor_value(db_setup, value_expected_type):
+    value, expected, type_ = value_expected_type
+    s = Sensor(name="test_sensor", _value=value)
+    assert s.last_value == expected
+    assert type(s.last_value) is type_
+
+
+@pytest.mark.parametrize("value", [
+    "lkjasdljasd", "1..1", "___"
+])
+def test_get_sensor_value_negative(db_setup, value):
+    """In case of value not being either number or bool, returns the actual string."""
+    s = Sensor(name="test_sensor", _value=value)
+    assert s.last_value == value
+    assert type(s.last_value) is str
+
+
+@pytest.mark.parametrize("value_expected_type", [
+    ("1", 1, float),
+    ("0", 0, float),
+    ("-0.1", -0.1, float),
+    ("1.23", 1.23, float),
+    ("true", True, bool),
+    ("True", True, bool),
+    ("false", False, bool),
+    ("False", False, bool),
+])
+def test_set_sensor_value(db_setup, value_expected_type):
+    value, expected, type_ = value_expected_type
+    s = Sensor(name="test_sensor")
+    s.last_value = value
+    assert s.last_value == expected
+    assert type(s.last_value) is type_

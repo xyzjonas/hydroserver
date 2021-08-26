@@ -35,8 +35,10 @@ class Controller(object):
 
     def action(self, control: Control, value=None):
         try:
+            if value:
+                value = control.parse_value(value)
             response = self.device.physical \
-                .send_control(control.name, value=control.parse_value(value))
+                .send_control(control.name, value=value)
             if not response.is_success:
                 raise ControllerError(
                     f"{self.device}: '{control.name}' is not success - {response}")

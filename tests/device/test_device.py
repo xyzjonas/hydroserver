@@ -67,11 +67,16 @@ def test_reconnect(mocked_device):
 
 @pytest.mark.parametrize(
     "data",
-    [None, "", 123, {}, {'status': None}, {'status': 'invalid'}],
-    ids=['none', 'empty_str', 'integer', 'empty_dict', 'status_none', 'invalid_status']
+    [None, "", 123, {'status': None}, {'status': 'invalid'}],
+    ids=['none', 'empty_str', 'integer', 'status_none', 'invalid_status']
 )
-def test_parse_device_response_empty(data):
+def test_parse_device_response_malformed(data):
     response = DeviceResponse.from_response_data(data=data)
+    assert response.status == Status.MALFORMED
+
+
+def test_parse_device_response_empty():
+    response = DeviceResponse.from_response_data(data={})
     assert response.status == Status.NO_DATA
 
 

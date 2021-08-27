@@ -161,6 +161,8 @@ class Control(Base):
             return self.parse_bool(value)
         elif self.input == 'int':
             return self.parse_int(value)
+        elif self.input == 'float':
+            return self.parse_float(value)
         else:
             return self.value
 

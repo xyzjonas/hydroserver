@@ -30,6 +30,7 @@ def test_get_tasks_from_db(mocked_device, mocked_device_and_db, task_num):
 
 
 def test_terminate(test_config, mocked_device, mocked_device_and_db):
+    CACHE.add_active_device(mocked_device)
     scheduler = Scheduler(mocked_device, None, None)
     scheduler.start()
     assert scheduler.is_running

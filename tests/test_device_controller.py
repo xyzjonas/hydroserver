@@ -4,8 +4,84 @@ from app.main.device_controller import *
 from app.models import Device, Task
 
 
-def device_action():
-    assert False
+@pytest.fixture
+def device(mocked_device):
+    CACHE.add_active_device(mocked_device)
+    return mocked_device
+
+
+def test_device_status(device, mocked_device_and_db):
+    """Test that read status marks device as online"""
+    controller = Controller(device)
+    assert not Device.query.get(mocked_device_and_db.id).is_online
+    controller.read_status()
+    assert Device.query.get(mocked_device_and_db.id).is_online
+
+
+@pytest.mark.parametrize(
+    "return_data", [None, {}, {"status": "error"}, 123],
+    ids=["none", "empty", "error", "int"]
+)
+def test_device_status_negative(device, mocked_device_and_db, return_data):
+    """Test that read status marks device as offline"""
+    def invalid_return_data(request_dict):
+        return return_data
+    CACHE.add_active_device(device)
+
+    controller = Controller(mocked_device_and_db)
+    controller.read_status()
+    assert Device.query.get(mocked_device_and_db.id).is_online
+
+    device._send_raw = invalid_return_data
+
+    controller.read_status()
+    assert not Device.query.get(mocked_device_and_db.id).is_online
+
+
+@pytest.mark.parametrize("return_data", [
+    {"status": "ok", "value": True},
+    {"status": "ok", "value": 123},
+    {"status": "ok", "value": 12.25},
+], ids=["bool", "int", "float"])
+def test_device_action(return_data, device, mocked_device_with_sensor_and_control):
+    model, sensor, control = mocked_device_with_sensor_and_control
+
+    def invalid_return_data(request_dict):
+        return return_data
+
+    assert not Device.query.get(model.id).is_online
+    controller = Controller(device)
+
+    device._send_raw = invalid_return_data
+
+    controller.action(control=control)
+    assert not Device.query.get(model.id).is_online
+    control.input = type(return_data["value"]).__name__
+    assert Control.query.get(control.id).parsed_value == return_data["value"]
+
+
+@pytest.mark.parametrize("return_data", [
+    None,
+    {},
+    123,
+    {"status": "error"},
+    {"status": "ok", "not_value_key": 12}
+], ids=["none", "empty", "int", "error", "ok"]
+)
+def test_device_action_negative(device, mocked_device_with_sensor_and_control, return_data):
+    model, sensor, control = mocked_device_with_sensor_and_control
+
+    def invalid_return_data(request_dict):
+        return return_data
+
+    controller = Controller(device)
+    controller.read_status()
+    assert Device.query.get(model.id).is_online
+
+    device._send_raw = invalid_return_data
+
+    controller.action(control=control)
+    assert not Device.query.get(model.id).is_online
 
 
 def device_register():

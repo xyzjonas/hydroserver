@@ -29,16 +29,17 @@ class DeviceType(Enum):
 
 
 class Status(Enum):
-    OK = Config.STATUS_OK
-    FAIL = Config.STATUS_FAIL
-    NO_DATA = "NO_DATA"
+    OK = Config.STATUS_OK  # response contains status and is 'ok'
+    FAIL = Config.STATUS_FAIL  # response contains status and is not 'ok'
+    NO_DATA = "NO_DATA"  # empty response
+    MALFORMED = "MALFORMED"  # response does not contain 'status'
 
     @classmethod
     def from_string(cls, string):
         try:
             return Status(string)
         except ValueError:
-            return Status.NO_DATA
+            return Status.MALFORMED
 
 
 class DeviceException(Exception):
@@ -54,9 +55,10 @@ class DeviceCommunicationException(DeviceException):
 
 class DeviceResponse:
     """Generic response object. Pops-out status item, everything else is dict."""
-    def __init__(self, status, data=None):
+    def __init__(self, status, data=None, reason=None):
         self.status = status
         self.data = data
+        self.reason = reason
 
     def __repr__(self):
         return f"<DeviceResponse (status={self.status}, data={self.data})>"
@@ -77,27 +79,25 @@ class DeviceResponse:
     @classmethod
     def from_response_data(cls, data):
         if type(data) is not dict:
-            return DeviceResponse(Status.NO_DATA, data)
-
+            return cls(Status.MALFORMED, data=data, reason="Response is not a dict.")
+        if not data:
+            return cls(Status.NO_DATA, data=data, reason="Response is an empty dict.")
+        if "status" not in data:
+            return cls(Status.MALFORMED, data=data, reason="Does not contain status.")
         status = Status.from_string(data.pop("status", None))
-        return DeviceResponse(status, data)
+        return cls(status, data)
 
 
 class SensorResponse(DeviceResponse):
     """Sensor/Control 'get' object. Data should contain 'value' key."""
-    def __init__(self, status, data=None):
-        super(SensorResponse, self).__init__(status, data)
-        if "value" not in data:
+    def __init__(self, status, data=None, reason=None):
+        super(SensorResponse, self).__init__(status, data, reason)
+        if not data or type(data) is not dict or "value" not in data:
             raise DeviceCommunicationException(f"Received response '{data}' is missing 'value'.")
 
     @property
     def value(self):
         return self.data['value']
-
-    @classmethod
-    def from_response_data(cls, data):
-        response = DeviceResponse.from_response_data(data)
-        return cls(response.status, response.data)
 
 
 class StatusResponse(DeviceResponse):
@@ -108,8 +108,8 @@ class StatusResponse(DeviceResponse):
     # todo: configurable?
     info_fields = ['status', 'uuid']
 
-    def __init__(self, status, data=None):
-        super(StatusResponse, self).__init__(status, data)
+    def __init__(self, status, data=None, reason=None):
+        super(StatusResponse, self).__init__(status, data, reason)
         self._controls = None
         self._sensors = None
 
@@ -143,11 +143,6 @@ class StatusResponse(DeviceResponse):
             sensors = {k: v for k, v in sensors.items() if self.__is_sensor(v)}
             self._sensors = sensors
         return self._sensors
-
-    @classmethod
-    def from_response_data(cls, data):
-        response = DeviceResponse.from_response_data(data)
-        return cls(response.status, response.data)
 
 
 class Device(object):

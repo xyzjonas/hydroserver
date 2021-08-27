@@ -1,5 +1,4 @@
 import logging
-from datetime import datetime
 
 from app import db
 from app.cache import CACHE
@@ -10,61 +9,59 @@ from app.device.mock import MockedDevice
 
 from app.models import Device, Control, Task
 from app.scheduler import Scheduler
-from app.scheduler.tasks import TaskType, ScheduledTask, TaskNotCreatedException
+from app.scheduler.tasks import TaskType
 from app.main.device_mapper import DeviceMapper
 
 log = logging.getLogger(__name__)
 
 
 class ControllerError(Exception):
+    """Errors that controller cannot solve."""
     pass
 
 
 class Controller(object):
-    """Wrapper for device, performs actions and updates models accordingly."""
+    """Wrapper for device, performs actions and updates models accordingly.
+    Catches all device exceptions."""
     def __init__(self, device):
-        self.device = DeviceMapper.from_anything(device)
+        try:
+            self.device = DeviceMapper.from_anything(device)
+        except KeyError:
+            raise ControllerError(f"Device controller init failed for: {device}")
 
     def read_status(self):
-        # todo: error state, update device?
-        status = self.device.physical.read_status()
-        if status.is_success:
-            device = Device.from_status_response(self.device.model, status, create=False)
-            if device:
-                db.session.commit()
+        device = self.device.model
+        try:
+            status = self.device.physical.read_status()
+            if status and status.is_success:
+                device = Device.from_status_response(self.device.model, status, create=False)
+            else:
+                device.is_online = False
+        except DeviceException as e:
+            log.error(f"{self.device.physical} read status failed: {e}")
+            device.is_online = False
+        finally:
+            db.session.commit()
 
     def action(self, control: Control, value=None):
+        device = self.device.model
         try:
             if value:
-                value = control.parse_value(value)
+                try:
+                    value = control.parse_value(value)
+                except TypeError as e:
+                    raise ControllerError(f"Invalid supplied value: {value}", e)
             response = self.device.physical \
                 .send_control(control.name, value=value)
             if not response.is_success:
-                raise ControllerError(
-                    f"{self.device}: '{control.name}' is not success - {response}")
-
+                log.error(f"{device}: '{control.name}' is not success - {response}")
+                device.is_online = False
             control.value = str(response.value)
-            db.session.commit()
         except DeviceException as e:
-            raise ControllerError(e)
-
-
-def device_action(device: Device, control: Control, value=None):
-    physical_device = CACHE.get_active_device_by_uuid(device.uuid)
-    if not device:
-        return f"{device.name} not connected", 503
-
-    try:
-        response = physical_device.send_control(control.name, value=control.parse_value(value))
-        if not response.is_success:
-            raise ControllerError(f"{device}: '{control.name}' is not success - {response}")
-
-        control.value = str(response.data)
-        db.session.add(control)
-        db.session.commit()
-        # return f"{device}: '{control.name}' cmd sent successfully: {response}", 200
-    except DeviceException as e:
-        raise ControllerError(e)
+            log.error(f"{self.device.physical} action for '{control.name}' failed: {e}")
+            device.is_online = False
+        finally:
+            db.session.commit()
 
 
 def register_device(url):

@@ -48,8 +48,10 @@ class DeviceException(Exception):
 
 
 class DeviceCommunicationException(DeviceException):
-    """Raise when there is something wrong with the device,
-    e.g. malformed data, filed connection, ..."""
+    """
+    Raised by the LOW LEVEL IMPLEMENTATIONS (!), when something goes wrong,
+    e.g.: wrong ports, HTTP error, etc...
+    """
     pass
 
 
@@ -104,9 +106,8 @@ class StatusResponse(DeviceResponse):
     """Status response object.
     Should contain everything, informational as well as sensors, controls."""
 
-    # non-control/sensor fields
     # todo: configurable?
-    info_fields = ['status', 'uuid']
+    info_fields = ['status', 'uuid']  # non-control/sensor fields
 
     def __init__(self, status, data=None, reason=None):
         super(StatusResponse, self).__init__(status, data, reason)
@@ -203,10 +204,12 @@ class Device(object):
 
     @property
     def is_responding(self):
+        """Device is sending/receiving according to 'protocol'"""
         return self._is_responding() and self._is_connected()
 
     @property
     def is_connected(self):
+        """Device is sending/receiving'"""
         return self._is_connected()
 
     @property
@@ -234,7 +237,7 @@ class Device(object):
         :param in retries: number of retries
         :rtype: dict
         """
-        # fallback to string-only requests
+        # legacy: fallback to string-only requests
         if type(request_data) is not dict:
             request_data = self._simple_request(str(request_data))
 
@@ -244,62 +247,41 @@ class Device(object):
             for i in range(retries):
                 if self.ensure_connectivity():
                     try:
-                        response_dict = self._send_raw(request_data)
-                        if response_dict:
-                            return response_dict
-                    except DeviceException:
+                        return self._send_raw(request_data)
+                    except DeviceCommunicationException:
                         pass
             raise
 
-    def read_status(self, strict=True):
+    def read_status(self):
         """
         READ full device status (expecting dev info + sensors/controls values
         :rtype: StatusResponse
         """
-        received = self.send_command(Command.STATUS.value)
-        try:
-            return StatusResponse.from_response_data(received)
-        except DeviceCommunicationException as e:
-            raise DeviceException("Unexpected error while reading status.", e)
+        return StatusResponse.from_response_data(
+            self.send_command(Command.STATUS.value))
 
-    def read_sensor(self, sensor: str, strict=True):
+    def read_sensor(self, sensor_name: str):
         """
         READ a sensor value and return number
-        :rtype: DeviceResponse
+        :rtype: SensorResponse
         """
-        # raise NotImplementedError("Read sensor not implemented yet, sorry.")
-        cmd = f"{Command.SENSOR.value}{sensor}"
-        response = DeviceResponse.from_response_data(self.send_command(cmd))
+        cmd = f"{Command.SENSOR.value}{sensor_name}"
+        response_dict = self.send_command(cmd)
+        return SensorResponse.from_response_data(response_dict)
 
-        if not response.is_success and strict:
-            raise DeviceException(
-                f"{self}: '{sensor}' sensor read failed '{response}'")
-
-        try:
-            # fixme: response TYPES!
-            response.data = response.data.get("value")
-        except (TypeError, ValueError):
-            if strict:
-                raise DeviceException(
-                    f"{self}: received value '{response.data}' is not a number")
-        return response
-
-    def send_control(self, control: str, value=None, strict=True):
+    def send_control(self, control_name: str, value=None, strict=True):
         """
         SEND a control command
         :rtype: SensorResponse
         """
-        command_name = f"{Command.CONTROL.value}{control}"
+        command_name = f"{Command.CONTROL.value}{control_name}"
         request = {
             'request': command_name,
         }
         if value:
             request['value'] = value
 
-        try:
-            return SensorResponse.from_response_data(self.send_command(request))
-        except DeviceException as e:
-            raise DeviceException("Unexpected error while sending control cmd.", e)
+        return SensorResponse.from_response_data(self.send_command(request))
 
     def health_check(self):
         if self.is_responding:
@@ -308,8 +290,7 @@ class Device(object):
 
         try:
             self.read_status()
-        except DeviceException as e:
-            log.error(f"Status failed: {e}")
+        except DeviceCommunicationException as e:
             return False
 
         if self.is_responding:

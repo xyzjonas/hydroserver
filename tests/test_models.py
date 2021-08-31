@@ -18,7 +18,7 @@ def task(db_setup):
 
 
 def test_empty_db(db_setup):
-    assert not Device.query.all()
+    assert not db.session.query(Device).all()
 
 
 def test_task_metadata(task):

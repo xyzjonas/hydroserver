@@ -238,7 +238,7 @@ class Task(Base):
 
     @staticmethod
     def set_success(task_id):
-        t = Task.query.filter_by(id=task_id).first()
+        t = db.session.query(Task).filter_by(id=task_id).first()
         if t:
             t.last_run = datetime.utcnow()
             t.last_run_success = True
@@ -247,7 +247,7 @@ class Task(Base):
 
     @staticmethod
     def set_failed(task_id, exception):
-        t = Task.query.filter_by(id=task_id).first()
+        t = db.session.query(Task).filter_by(id=task_id).first()
         if t:
             t.last_run = datetime.utcnow()
             t.last_run_success = False
@@ -319,14 +319,14 @@ class Device(Base):
         for key, value in data.items():
             # new style (JSON) of controls/sensors
             if type(value) is dict and value.get('type') == 'control':
-                control = Control.query.filter_by(name=key, device=self).first()
+                control = db.session.query(Control).filter_by(name=key, device=self).first()
                 if not control:
                     control = Control(name=key, description=key, device=self)
                 control.value = str(value.get('value')) or NOT_APPLICABLE
                 control.input = str(value.get('input'))
 
             elif type(value) is dict and value.get('type') == 'sensor':
-                sensor = Sensor.query.filter_by(name=key, device=self).first()
+                sensor = db.session.query(Sensor).filter_by(name=key, device=self).first()
                 if not sensor:
                     sensor = Sensor(
                         name=key,
@@ -338,15 +338,15 @@ class Device(Base):
 
             # todo: legacy remove!
             elif key in controls_keys:
-                control = Control.query.filter_by(name=key, device=self).first()
+                control = db.session.query(Control).filter_by(name=key, device=self).first()
                 if not controls_keys:  # todo: necessary?
-                    raise UnexpectedModelException("Key was in controls, but query failed.")
+                    raise UnexpectedModelException("Key was in controls, db.session.query(but) failed.")
                 control.value = str(value)
             # todo: legacy remove!
             elif key in sensors_keys:
-                sensor = Sensor.query.filter_by(name=key, device=self).first()
+                sensor = db.session.query(Sensor).filter_by(name=key, device=self).first()
                 if not sensor:  # todo: necessary?
-                    raise UnexpectedModelException("Key was in controls, but query failed.")
+                    raise UnexpectedModelException("Key was in controls, db.session.query(but) failed.")
                 sensor.last_value = value
 
             else:
@@ -354,7 +354,7 @@ class Device(Base):
 
     @classmethod
     def from_status_response(cls, device: PhysicalDevice, status: StatusResponse, create=True):
-        d = Device.query.filter_by(uuid=device.uuid).first()
+        d = db.session.query(Device).filter_by(uuid=device.uuid).first()
         if not d and create:
             d = Device(uuid=device.uuid,
                        name=str(device),

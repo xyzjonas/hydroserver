@@ -13,9 +13,9 @@ def device(mocked_device):
 def test_device_status(device, mocked_device_and_db):
     """Test that read status marks device as online"""
     controller = Controller(device)
-    assert not Device.query.get(mocked_device_and_db.id).is_online
+    assert not db.session.query(Device).get(mocked_device_and_db.id).is_online
     controller.read_status()
-    assert Device.query.get(mocked_device_and_db.id).is_online
+    assert db.session.query(Device).get(mocked_device_and_db.id).is_online
 
 
 @pytest.mark.parametrize(
@@ -30,12 +30,12 @@ def test_device_status_negative(device, mocked_device_and_db, return_data):
 
     controller = Controller(mocked_device_and_db)
     controller.read_status()
-    assert Device.query.get(mocked_device_and_db.id).is_online
+    assert db.session.query(Device).get(mocked_device_and_db.id).is_online
 
     device._send_raw = invalid_return_data
 
     controller.read_status()
-    assert not Device.query.get(mocked_device_and_db.id).is_online
+    assert not db.session.query(Device).get(mocked_device_and_db.id).is_online
 
 
 @pytest.mark.parametrize("return_data", [
@@ -49,15 +49,15 @@ def test_device_action(return_data, device, mocked_device_with_sensor_and_contro
     def invalid_return_data(request_dict):
         return return_data
 
-    assert not Device.query.get(model.id).is_online
+    assert not db.session.query(Device).get(model.id).is_online
     controller = Controller(device)
 
     device._send_raw = invalid_return_data
 
     controller.action(control=control)
-    assert not Device.query.get(model.id).is_online
+    assert not db.session.query(Device).get(model.id).is_online
     control.input = type(return_data["value"]).__name__
-    assert Control.query.get(control.id).parsed_value == return_data["value"]
+    assert db.session.query(Control).get(control.id).parsed_value == return_data["value"]
 
 
 @pytest.mark.parametrize("return_data", [
@@ -76,12 +76,12 @@ def test_device_action_negative(device, mocked_device_with_sensor_and_control, r
 
     controller = Controller(device)
     controller.read_status()
-    assert Device.query.get(model.id).is_online
+    assert db.session.query(Device).get(model.id).is_online
 
     device._send_raw = invalid_return_data
 
     controller.action(control=control)
-    assert not Device.query.get(model.id).is_online
+    assert not db.session.query(Device).get(model.id).is_online
 
 
 def device_register():
@@ -96,9 +96,9 @@ def test_refresh_devices(mocked_device_and_db):
 
 def test_init_device(db_setup, mocked_device):
     init_device(mocked_device)
-    device = Device.query.filter_by(uuid=mocked_device.uuid).first()
+    device = db.session.query(Device).filter_by(uuid=mocked_device.uuid).first()
     assert device
-    status_tasks = Task.query.filter_by(device=device, name='status').all()
+    status_tasks = db.session.query(Task).filter_by(device=device, name='status').all()
     assert len(status_tasks) == 1
 
 

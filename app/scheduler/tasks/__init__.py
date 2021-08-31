@@ -8,6 +8,7 @@ from enum import Enum
 from croniter import croniter, CroniterNotAlphaError
 
 from app.models import Task
+from app import db
 
 AVAILABLE_TASKS = {}
 
@@ -83,7 +84,7 @@ class TaskRunnable:
     log = logging.getLogger(__name__)
 
     def __init__(self, task_id: int):
-        if not Task.query.filter_by(id=task_id).first():
+        if not db.session.query(Task).filter_by(id=task_id).first():
             raise TaskNotCreatedException(f"No such task '{task_id}'.")
         self.task_id = task_id
 
@@ -135,5 +136,7 @@ class TaskRunnable:
                         Task.set_failed(task_id, e)
                     else:
                         TaskRunnable.log.error("Decorated function is missing 'self' parameter.")
+                finally:
+                    db.session.close()
             return wrapper
         return decorate

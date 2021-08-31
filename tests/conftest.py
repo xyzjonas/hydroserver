@@ -45,7 +45,7 @@ def mocked_device_and_db(mocked_device, db_setup):
     )
     db.session.add(dev)
     db.session.commit()
-    dev = Device.query.get(dev.id)
+    dev = db.session.query(Device).get(dev.id)
     return dev
 
 

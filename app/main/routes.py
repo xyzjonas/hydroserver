@@ -39,20 +39,20 @@ def root():
 
 @bp.route('/devices', methods=['GET'])
 def all_devices():
-    devices = Device.query.all()
+    devices = db.session.query(Device).all()
     response = [d.dictionary for d in devices]
     return jsonify(response)
 
 
 @bp.route('/devices/<int:device_id>', methods=['GET'])
 def get_device(device_id):
-    d = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
+    d = db.session.query(Device).filter_by(id=_get_id(device_id)).first_or_404()
     return jsonify(d.dictionary)
 
 
 @bp.route('/devices/<int:device_id>', methods=['DELETE'])
 def delete_device(device_id):
-    d = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
+    d = db.session.query(Device).filter_by(id=_get_id(device_id)).first_or_404()
     try:
         db.session.delete(d)
         db.session.commit()
@@ -63,13 +63,13 @@ def delete_device(device_id):
 
 @bp.route('/devices/<int:device_id>/sensors', methods=['GET'])
 def get_device_sensors(device_id):
-    d = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
+    d = db.session.query(Device).filter_by(id=_get_id(device_id)).first_or_404()
     return jsonify([s.dictionary for s in d.sensors])
 
 
 @bp.route('/devices/<int:device_id>/sensors/<int:sensor_id>', methods=['POST'])
 def post_device_sensor(device_id, sensor_id):
-    s = Sensor.query.filter_by(id=_get_id(sensor_id)).first_or_404()
+    s = db.session.query(Sensor).filter_by(id=_get_id(sensor_id)).first_or_404()
     data = request.json
     if not data:
         return "No data received", 400
@@ -84,14 +84,14 @@ def post_device_sensor(device_id, sensor_id):
 
 @bp.route('/devices/<int:device_id>/controls', methods=['GET'])
 def get_device_controls(device_id):
-    d = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
+    d = db.session.query(Device).filter_by(id=_get_id(device_id)).first_or_404()
     return jsonify([c.dictionary for c in d.controls])
 
 
 @bp.route('/devices/<int:device_id>/controls/<int:control_id>', methods=['POST'])
 def post_device_control(device_id, control_id):
-    Device.query.filter_by(id=_get_id(device_id)).first_or_404()
-    c = Control.query.filter_by(id=_get_id(control_id)).first_or_404()
+    db.session.query(Device).filter_by(id=_get_id(device_id)).first_or_404()
+    c = db.session.query(Control).filter_by(id=_get_id(control_id)).first_or_404()
     data = request.json
     if not data:
         return "No data received", 400
@@ -106,14 +106,14 @@ def post_device_control(device_id, control_id):
 
 @bp.route('/devices/<int:device_id>/tasks', methods=['GET'])
 def get_device_tasks(device_id):
-    d = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
+    d = db.session.query(Device).filter_by(id=_get_id(device_id)).first_or_404()
     return jsonify([t.dictionary for t in d.tasks])
 
 
 @bp.route('/devices/<int:device_id>/tasks/<int:task_id>', methods=['DELETE'])
 def delete_device_task(device_id, task_id):
-    Device.query.filter_by(id=_get_id(device_id)).first_or_404()
-    task = Task.query.filter_by(id=_get_id(task_id)).first_or_404()
+    db.session.query(Device).filter_by(id=_get_id(device_id)).first_or_404()
+    task = db.session.query(Task).filter_by(id=_get_id(task_id)).first_or_404()
     if task.locked:
         return f"task '{task_id}' is locked.", 400
     db.session.delete(task)
@@ -123,8 +123,8 @@ def delete_device_task(device_id, task_id):
 
 @bp.route('/devices/<int:device_id>/tasks/<int:task_id>/pause', methods=['POST'])
 def pause_device_task(device_id, task_id):
-    Device.query.filter_by(id=_get_id(device_id)).first_or_404()
-    task = Task.query.filter_by(id=_get_id(task_id)).first_or_404()
+    db.session.query(Device).filter_by(id=_get_id(device_id)).first_or_404()
+    task = db.session.query(Task).filter_by(id=_get_id(task_id)).first_or_404()
     task.paused = True
     db.session.commit()
     return f'Task {task_id} paused.', 200
@@ -132,8 +132,8 @@ def pause_device_task(device_id, task_id):
 
 @bp.route('/devices/<int:device_id>/tasks/<int:task_id>/resume', methods=['POST'])
 def resume_device_task(device_id, task_id):
-    Device.query.filter_by(id=_get_id(device_id)).first_or_404()
-    task = Task.query.filter_by(id=_get_id(task_id)).first_or_404()
+    db.session.query(Device).filter_by(id=_get_id(device_id)).first_or_404()
+    task = db.session.query(Task).filter_by(id=_get_id(task_id)).first_or_404()
     task.paused = False
     db.session.commit()
     return f'Task {task_id} resumed.', 200
@@ -141,7 +141,7 @@ def resume_device_task(device_id, task_id):
 
 @bp.route('/devices/<int:device_id>/tasks', methods=['POST'])
 def post_device_tasks(device_id):
-    device = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
+    device = db.session.query(Device).filter_by(id=_get_id(device_id)).first_or_404()
     data = request.json
 
     if not data:
@@ -153,7 +153,7 @@ def post_device_tasks(device_id):
     # Are we creating a new item or modifying an existing one...?
     created = False
     if "id" in data:
-        task = Task.query.filter_by(id=data["id"]).first()
+        task = db.session.query(Task).filter_by(id=data["id"]).first()
         if not task:
             return f"No such task '{data['id']}'for device {device.name}", 400
     else:
@@ -162,14 +162,14 @@ def post_device_tasks(device_id):
 
     # SANITAZING input
     if data.get("control"):
-        control = Control.query.filter_by(name=data["control"],
+        control = db.session.query(Control).filter_by(name=data["control"],
                                           device=device).first()
         if not control:
             return f"{device.name}: no such control '{data['control']}", 400
         task.control = control
 
     if data.get("sensor"):
-        sensor = Sensor.query.filter_by(name=data["sensor"], device=device).first()
+        sensor = db.session.query(Sensor).filter_by(name=data["sensor"], device=device).first()
         if not sensor:
             return f"{device.name}: no such sensor '{data['sensor']}", 400
         task.sensor = sensor
@@ -206,7 +206,7 @@ def post_device_tasks(device_id):
 
 @bp.route('/devices/<int:device_id>', methods=['POST'])
 def modify_device(device_id):
-    device = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
+    device = db.session.query(Device).filter_by(id=_get_id(device_id)).first_or_404()
     data = request.json
     if not data:
         return "No data received", 400
@@ -226,7 +226,7 @@ def modify_device(device_id):
 
 @bp.route('/devices/<string:device_id>/action', methods=['POST'])
 def device_action(device_id):
-    device_db = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
+    device_db = db.session.query(Device).filter_by(id=_get_id(device_id)).first_or_404()
     data = request.json
     if not data:
         return "No data received", 400
@@ -234,7 +234,7 @@ def device_action(device_id):
     if "control" not in data:
         return "'control' field is required", 400
 
-    control = Control.query \
+    control = db.session.query(Control) \
         .filter_by(name=data["control"], device=device_db) \
         .first_or_404(description=f"No such control {data['control']}")
     try:
@@ -246,7 +246,7 @@ def device_action(device_id):
 
 @bp.route('/devices/<string:device_id>/categorize', methods=['POST'])
 def post_device_categorize(device_id):
-    device = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
+    device = db.session.query(Device).filter_by(id=_get_id(device_id)).first_or_404()
     data = request.json
     if not data:
         return "No data received", 400
@@ -278,8 +278,8 @@ def post_device_categorize(device_id):
 
 @bp.route('/devices/<string:device_id>/controls/<int:control_id>', methods=['DELETE'])
 def delete_control(device_id, control_id):
-    device = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
-    control = Control.query.filter_by(id=_get_id(control_id)).first_or_404()
+    device = db.session.query(Device).filter_by(id=_get_id(device_id)).first_or_404()
+    control = db.session.query(Control).filter_by(id=_get_id(control_id)).first_or_404()
 
     name = control.name
     device.put_unknown_command(name, control.state)
@@ -290,8 +290,8 @@ def delete_control(device_id, control_id):
 
 @bp.route('/devices/<string:device_id>/sensors/<int:sensor_id>', methods=['DELETE'])
 def delete_sensor(device_id, sensor_id):
-    device = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
-    sensor = Sensor.query.filter_by(id=_get_id(sensor_id)).first_or_404()
+    device = db.session.query(Device).filter_by(id=_get_id(device_id)).first_or_404()
+    sensor = db.session.query(Sensor).filter_by(id=_get_id(sensor_id)).first_or_404()
 
     name = sensor.name
     device.put_unknown_command(name, sensor.last_value)
@@ -302,7 +302,7 @@ def delete_sensor(device_id, sensor_id):
 
 @bp.route('/devices/<string:device_id>/scheduler', methods=['POST'])
 def device_run_scheduler(device_id):
-    device_db = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
+    device_db = db.session.query(Device).filter_by(id=_get_id(device_id)).first_or_404()
     try:
         run_scheduler(device_db.uuid)
     except ControllerError as e:
@@ -335,7 +335,7 @@ def scan_devices():
 def refresh_device(device_id):
     """Performs the 'init' operation - iterates through DB stored devices and tries
     to initialize them and store in cache (if not already there)."""
-    device_db = Device.query.filter_by(id=_get_id(device_id)).first_or_404()
+    device_db = db.session.query(Device).filter_by(id=_get_id(device_id)).first_or_404()
     try:
         refresh_devices(devices=[device_db])
     except ControllerError as e:

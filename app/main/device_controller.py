@@ -30,6 +30,7 @@ class Controller(object):
             raise ControllerError(f"Device controller init failed for: {device}")
 
     def read_status(self):
+        """Read status and update db model."""
         device = self.device.model
         try:
             status = self.device.physical.read_status()
@@ -44,6 +45,7 @@ class Controller(object):
             db.session.commit()
 
     def action(self, control: Control, value=None):
+        """Send command action and update db model."""
         device = self.device.model
         try:
             if value:
@@ -93,7 +95,7 @@ def init_device(physical_device):
     if status.is_success:
         device = Device.from_status_response(physical_device, status)
         # Create the locked status task (if not yet present).
-        if not Task.query.filter_by(device=device, name='status', cron='status').first():
+        if not db.session.query(Task).filter_by(device=device, name='status', cron='status').first():
             task = Task(name='status', cron='status', device=device,
                         type=TaskType.STATUS.value, locked=True)
             db.session.add(task)
@@ -113,28 +115,14 @@ def run_scheduler(uuid):
     device = DeviceMapper.from_uuid(uuid).model
     device.scheduler_error = None
 
-    def _edit_scheduler_error(cause=None):
-        """Scheduler callback"""
-        dev = DeviceMapper.from_uuid(uuid).model
-        dev.scheduler_error = str(cause)
-        db.session.commit()
-
-    def _set_device_error():
-        dev = DeviceMapper.from_uuid(uuid).model
-        dev.is_online = False
-        db.session.commit()
-
-    scheduler = Scheduler(
-        physical_device,
-        device_offline_callback=_set_device_error,
-        scheduler_error_callback=_edit_scheduler_error,
-    )
+    scheduler = Scheduler(physical_device)
     CACHE.add_scheduler(uuid, scheduler)
     scheduler.start()
     db.session.commit()
 
 
 def scan_devices():
+    """Run scan functions - for each device type."""
     CACHE.clear_devices()
     found_devices = scan()
     for device in found_devices:
@@ -147,7 +135,7 @@ def scan_devices():
 def refresh_devices(devices=None, strict=True):
     """Init (reconnect & cache) all devices found in the db."""
     if not devices:
-        devices = Device.query.all()
+        devices = db.session.query(Device).all()
         log.info(f'Initializing {len(devices)} devices found in the db).')
 
     for device in devices:
@@ -191,7 +179,7 @@ def refresh_devices(devices=None, strict=True):
             continue
 
         # 4) Create the locked status task (if not yet present).
-        if not Task.query.filter_by(device=device, name='status', cron='status').first():
+        if not db.session.query(Task).filter_by(device=device, name='status', cron='status').first():
             task = Task(name='status', cron='status', device=device,
                         type=TaskType.STATUS.value, locked=True)
             db.session.add(task)

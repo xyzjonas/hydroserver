@@ -21,7 +21,7 @@ def test_init(actual_wifi_device):
 
 
 def test_read_status(actual_wifi_device):
-    status = actual_wifi_device.read_status(strict=False)
+    status = actual_wifi_device.read_status()
     assert status.is_success
     assert type(status) is StatusResponse
     assert type(status.data) is dict

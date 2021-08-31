@@ -15,7 +15,7 @@ def status_task(mocked_device_and_db):
     t = Task(device=mocked_device_and_db, type=TaskType.STATUS.value)
     db.session.add(t)
     db.session.commit()
-    return Task.query.filter_by(id=t.id).first()
+    return db.session.query(Task).filter_by(id=t.id).first()
 
 
 @pytest.mark.parametrize("task_num", [5, 10, 50])
@@ -25,13 +25,13 @@ def test_get_tasks_from_db(mocked_device, mocked_device_and_db, task_num):
         task = Task(device=DeviceMapper.from_physical(mocked_device_and_db).model)
         task.type = TaskType.STATUS.value
         db.session.commit()
-    scheduler = Scheduler(mocked_device, None, None)
+    scheduler = Scheduler(mocked_device)
     assert len(scheduler.get_tasks_from_db()) == task_num
 
 
 def test_terminate(test_config, mocked_device, mocked_device_and_db):
     CACHE.add_active_device(mocked_device)
-    scheduler = Scheduler(mocked_device, None, None)
+    scheduler = Scheduler(mocked_device)
     scheduler.start()
     assert scheduler.is_running
     scheduler.terminate()

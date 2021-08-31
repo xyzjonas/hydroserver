@@ -12,7 +12,7 @@ def test_delete(mocked_device_with_sensor_and_control, app_setup):
     with app_setup.test_client() as client:
         r = client.delete(url)
         assert r.status_code == 200
-    assert not Device.query.filter_by(id=device.id).first()
+    assert not db.session.query(Device).filter_by(id=device.id).first()
 
 
 @pytest.mark.parametrize("url", [

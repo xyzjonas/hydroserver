@@ -10,7 +10,7 @@ from app.config import Config
 
 SCAN_SLEEP = 2
 
-db = SQLAlchemy()
+db = SQLAlchemy(session_options={"autoflush": False})
 migrate = Migrate()
 
 logging.basicConfig(level=logging.DEBUG,
@@ -27,10 +27,11 @@ def create_app(config_class=Config):
     db.app = app  # global db
 
     # flask migrate
+    opts = {"autoflush": False}
     if db.engine.url.drivername == 'sqlite':
-        migrate.init_app(app, db, render_as_batch=True)
+        migrate.init_app(app, db, render_as_batch=True, session_options=opts)
     else:
-        migrate.init_app(app, db)
+        migrate.init_app(app, db, session_options=opts)
 
     from app.main import bp as main_bp
     app.register_blueprint(main_bp)

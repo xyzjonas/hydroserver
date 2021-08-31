@@ -27,7 +27,7 @@ class Interval(TaskRunnable):
 
     def __init__(self, task_id: int):
         super().__init__(task_id)
-        task = Task.query.filter_by(id=task_id).first()
+        task = db.session.query(Task).filter_by(id=task_id).first()
         if not task.sensor:
             raise TaskNotCreatedException(f"Sensor needed for '{self.type}' task.")
         if not task.control:
@@ -40,13 +40,13 @@ class Interval(TaskRunnable):
     @TaskRunnable.update_task_status()
     def run(self, device: PhysicalDevice):
         self.log.info(f"{device}: running {self.type}")
-        sensor = Task.query.filter_by(id=self.task_id).first().sensor
-        control = Task.query.filter_by(id=self.task_id).first().control
+        sensor = db.session.query(Task).filter_by(id=self.task_id).first().sensor
+        control = db.session.query(Task).filter_by(id=self.task_id).first().control
 
         response = device.read_sensor(sensor.name)
         if not response.is_success:
             raise TaskException(f"{device}: failed to read sensor {sensor.name}: {response}")
-        value = response.data
+        value = response.value
 
         controller = Controller(device)
 
@@ -76,7 +76,7 @@ class Toggle(TaskRunnable):
 
     def __init__(self, task_id: int):
         super().__init__(task_id)
-        self.task = Task.query.filter_by(id=task_id).first()
+        self.task = db.session.query(Task).filter_by(id=task_id).first()
         if not self.task.control:
             raise TaskNotCreatedException(f"Control needed for '{self.type}' task.")
 

@@ -59,7 +59,7 @@ def test_toggle(mocked_device, mocked_device_with_sensor_and_control, task_facto
 
     toggle_task = Toggle(t.id)
     toggle_task.run(mocked_device)
-    task_db = Task.query.filter_by(id=t.id).first()
+    task_db = db.session.query(Task).filter_by(id=t.id).first()
     assert task_db.last_run
     assert task_db.last_run_success
     assert not task_db.last_run_error
@@ -104,7 +104,7 @@ def test_interval(mocked_device, mocked_device_with_sensor_and_control, task_fac
 
     interval_task = Interval(t.id)
     interval_task.run(mocked_device)
-    task_db = Task.query.filter_by(id=t.id).first()
+    task_db = db.session.query(Task).filter_by(id=t.id).first()
     assert task_db.last_run
     assert task_db.last_run_success
     assert not task_db.last_run_error
@@ -156,7 +156,7 @@ def test_status(mocked_device, mocked_device_and_db, task_factory):
 
     status_task = Status(t.id)
     status_task.run(mocked_device)
-    task_db = Task.query.filter_by(id=t.id).first()
+    task_db = db.session.query(Task).filter_by(id=t.id).first()
     assert task_db.last_run
     assert task_db.last_run_success
     assert not task_db.last_run_error

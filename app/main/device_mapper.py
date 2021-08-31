@@ -45,7 +45,7 @@ class DeviceMapper(object):
 
     @classmethod
     def from_physical(cls, physical_device):
-        db_device = Device.query.filter_by(uuid=physical_device.uuid).first()
+        db_device = db.session.query(Device).filter_by(uuid=physical_device.uuid).first()
         if not db_device:
             raise KeyError(f'No such device in database: {physical_device}')
         return cls(db_device, physical_device)

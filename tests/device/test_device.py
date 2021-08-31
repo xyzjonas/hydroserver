@@ -19,6 +19,15 @@ DEVICES_IDS = [
 ]
 
 
+@pytest.fixture
+def error_device(mocked_device):
+    def invalid_return_data(request_dict):
+        raise DeviceCommunicationException()
+
+    mocked_device._send_raw = invalid_return_data
+    return mocked_device
+
+
 def test_init_device(db_setup):
     d = mock.MockedDevice()
     assert init_device(d)
@@ -94,3 +103,21 @@ def test_parse_device_response_nok(data):
 def test_parse_device_response_ok():
     res = DeviceResponse.from_response_data(data={"status": "ok"})
     assert res.is_success
+
+
+@pytest.mark.parametrize("method_params", [
+    ("read_status", []),
+    ("send_command", ["xxx"]),
+    ("read_sensor", ["xxx"]),
+    ("send_control", ["xxx"])
+], ids=["read_status", "send_command", "read_sensor", "send_control"])
+def test_communication_error(error_device, method_params):
+    method, params = method_params
+
+    with pytest.raises(DeviceCommunicationException):
+        getattr(error_device, method)(*params)
+
+
+def test_health_check_negative(error_device):
+    error_device._is_responding = lambda: False
+    assert not error_device.health_check()

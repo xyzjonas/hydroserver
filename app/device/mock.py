@@ -68,9 +68,9 @@ class MockedDevice(Device):
     def _get_url(self):
         return f"mocked://{self.uuid}"
 
-    def send_control(self, control: str, value=None, strict=True):
+    def send_control(self, control_name: str, value=None, strict=True):
         self.toggle = not self.toggle
-        return super().send_control(control, strict)
+        return super().send_control(control_name, strict)
 
     def __repr__(self):
         return f"{super().__repr__()[:-2]}, random_shit='why_not')>"

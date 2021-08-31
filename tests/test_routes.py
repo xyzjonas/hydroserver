@@ -54,7 +54,7 @@ def test_pause_task(app_setup, mocked_device_and_db, task_factory):
     with app_setup.test_client() as client:
         r = client.post(url)
         assert r.status_code == 200
-    assert Task.query.filter_by(id=task.id).first().paused
+    assert db.session.query(Task).filter_by(id=task.id).first().paused
 
 
 def test_resume_task(app_setup, mocked_device_and_db, task_factory):
@@ -64,4 +64,4 @@ def test_resume_task(app_setup, mocked_device_and_db, task_factory):
     with app_setup.test_client() as client:
         r = client.post(url)
         assert r.status_code == 200
-    assert not Task.query.filter_by(id=task.id).first().paused
+    assert not db.session.query(Task).filter_by(id=task.id).first().paused

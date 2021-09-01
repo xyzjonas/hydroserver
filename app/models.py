@@ -21,12 +21,16 @@ class UnexpectedModelException(Exception):
 
 
 class Base(db.Model):
+    __items__ = ['id']  # use to specify REST available items
+
     __abstract__ = True
     id = db.Column(db.Integer, primary_key=True)
 
     def _to_dict(self):
         result = {}
-        for attribute in self.__dict__:
+        available_items = self.__items__ or self.__dict__
+
+        for attribute in available_items:
             if attribute.startswith("_"):
                 continue
             value = self.__getattribute__(attribute)
@@ -74,11 +78,14 @@ class Sensor(Base):
     """
     A Read only sensor on the device (e.g. a temperature sensor)
     """
+    __items__ = Base.__items__.extend(['id', 'name', 'description', 'unit'])
+
     name = db.Column(db.String(80), nullable=False)
     description = db.Column(db.String(80), nullable=True)
     _value = db.Column(db.String(80), default='-1')
     unit = db.Column(db.String(80), nullable=True)
 
+    # Careful with this, could slow things down significantly.
     # history (=backref) - list of historic values
 
     device_id = db.Column(db.Integer, db.ForeignKey('device.id'), nullable=False)
@@ -143,7 +150,7 @@ class Sensor(Base):
 
     @property
     def value_type(self):
-        return str(type(self.last_value))
+        return type(self.last_value).__name__
 
     @property
     def dictionary(self):
@@ -157,6 +164,8 @@ class Control(Base):
     """
     A controllable entity on the device (e.g. a switch)
     """
+    __items__ = None
+
     name = db.Column(db.String(80), nullable=False)
     description = db.Column(db.String(80), nullable=True)
     _state = db.Column(db.Boolean, default=False)  # deprecated
@@ -200,6 +209,8 @@ class Task(Base):
     """
     A schedule-able action to be performed on the device
     """
+    __items__ = None
+
     name = db.Column(db.String(80), default="Unnamed task")
     cron = db.Column(db.String(80), default="* * * * *")  # cron signature or 'status' keyword
     type = db.Column(db.String(80), nullable=True)
@@ -282,6 +293,8 @@ class Device(Base):
     """
     Device
     """
+    __items__ = None
+
     time_modified = db.Column(db.DateTime, nullable=True)
     last_seen_online = db.Column(db.DateTime, nullable=True)
 
@@ -394,12 +407,14 @@ class Device(Base):
 
 class HistoryItem(Base):
     """Stored sensor's history data."""
+    __items__ = None
+
     timestamp = db.Column(db.DateTime, nullable=True)
     _value = db.Column(db.String(80), default='-1')
 
     sensor_id = db.Column(db.Integer, db.ForeignKey('sensor.id'), nullable=False)
     sensor = db.relationship(
-        'Sensor', backref=db.backref('history', lazy=False, cascade='all, delete-orphan'))
+        'Sensor', backref=db.backref('history', lazy=True, cascade='all, delete-orphan'))
 
     @property
     def dictionary(self):

@@ -27,6 +27,7 @@ class TaskType(Enum):
     TOGGLE = "toggle"
     INTERVAL = "interval"
     STATUS = "status"
+    HISTORY = "history"
     GENERIC = "generic"
 
     @classmethod
@@ -102,16 +103,19 @@ class TaskRunnable:
 
     @classmethod
     def from_database_task(cls, task: Task):
-        from app.scheduler.tasks.builtin import Toggle, Status, Interval
+        from app.scheduler.tasks.builtin import Toggle, Status, Interval, HistoryLogger
 
         typ = TaskType.from_string(task.type)
         if typ == TaskType.STATUS:
             return Status(task.id)
+        if typ == TaskType.HISTORY:
+            return HistoryLogger(task.id)
         elif typ == TaskType.TOGGLE:
             return Toggle(task.id)
         elif typ == TaskType.INTERVAL:
             return Interval(task.id)
         else:
+            # todo: instantiate generic (user-added) task by name
             raise TaskNotCreatedException(f"Unknown task type")
 
     @staticmethod

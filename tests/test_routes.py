@@ -1,9 +1,10 @@
+import random
 import time
 
 from app.main.device_controller import *
 from app.cache import CACHE
 from app.scheduler.tasks import TaskType
-from app.models import Task
+from app.models import Task, HistoryItem
 
 
 def test_get_devices(db_setup, app_setup, mocked_device):
@@ -65,3 +66,19 @@ def test_resume_task(app_setup, mocked_device_and_db, task_factory):
         r = client.post(url)
         assert r.status_code == 200
     assert not db.session.query(Task).filter_by(id=task.id).first().paused
+
+
+def test_get_sensor_history(app_setup, mocked_device_with_sensor_and_control):
+    device, sensor, control = mocked_device_with_sensor_and_control
+    for _ in range(100):
+        val = random.randint(0, 100)
+        db.session.add(
+            HistoryItem(sensor=sensor, _value=val, timestamp=datetime.datetime.utcnow()))
+    db.session.commit()
+
+    url = f"/devices/{device.id}/sensors/{sensor.id}/history"
+    with app_setup.test_client() as client:
+        response = client.get(url)
+    assert response.status_code == 200
+    assert type(response.json) is list
+    assert len(response.json) == 100

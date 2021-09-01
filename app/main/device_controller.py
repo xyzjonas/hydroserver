@@ -1,3 +1,4 @@
+import datetime
 import logging
 
 from app import db
@@ -7,7 +8,7 @@ from app.device.wifi import WifiDevice
 from app.device.serial import SerialDevice
 from app.device.mock import MockedDevice
 
-from app.models import Device, Control, Task
+from app.models import Device, Control, Task, HistoryItem
 from app.scheduler import Scheduler
 from app.scheduler.tasks import TaskType
 from app.main.device_mapper import DeviceMapper
@@ -65,6 +66,14 @@ class Controller(object):
         finally:
             db.session.commit()
 
+    def log_sensors(self):
+        """Create history items for all attached sensors."""
+        time = datetime.datetime.utcnow()
+        for sensor in self.device.model.sensors:
+            item = HistoryItem(timestamp=time, _value=str(sensor.last_value), sensor=sensor)
+            db.session.add(item)
+        db.session.commit()
+
 
 def register_device(url):
     device = WifiDevice(url=url)
@@ -82,6 +91,33 @@ def register_device(url):
     CACHE.add_active_device(device)
 
 
+def ensure_system_tasks_are_created(device_db):
+    """Create 'system' tasks in case they are not created yet"""
+    # 1) Create the locked status task (if not yet present).
+    if not db.session.query(Task) \
+            .filter_by(device=device_db, name='status', cron='status') \
+            .first():
+        task = Task(name='status', cron='status', device=device_db,
+                    type=TaskType.STATUS.value, locked=True)
+        db.session.add(task)
+
+    # 2) Create the locked sensor logger task (if not yet present).
+    if not db.session.query(Task) \
+            .filter_by(device=device_db, name='history-logger') \
+            .first():
+        from app import config
+        configured_cron = config.get('SENSOR_HISTORY_LOGGING_CRON', None)
+        if not configured_cron:
+            log.error("SENSOR_HISTORY_LOGGING_CRON not set-up, sensor history disabled.")
+        # todo: validate CRON format
+        task = Task(name='history-logger', cron=configured_cron, device=device_db,
+                    type=TaskType.HISTORY.value, locked=True)
+        db.session.add(task)
+
+    # 3) Create history clean-up task
+    # todo: implement
+
+
 def init_device(physical_device):
     """
     Create DB device object. Runs the first time the device is discovered.
@@ -93,12 +129,8 @@ def init_device(physical_device):
 
     status = physical_device.read_status()
     if status.is_success:
-        device = Device.from_status_response(physical_device, status)
-        # Create the locked status task (if not yet present).
-        if not db.session.query(Task).filter_by(device=device, name='status', cron='status').first():
-            task = Task(name='status', cron='status', device=device,
-                        type=TaskType.STATUS.value, locked=True)
-            db.session.add(task)
+        device = Device.from_status_response(physical_device, status, create=True)
+        ensure_system_tasks_are_created(device)
         db.session.commit()
         CACHE.add_active_device(physical_device)
         return True
@@ -178,11 +210,8 @@ def refresh_devices(devices=None, strict=True):
             log.error(f'Unreachable device: {physical_device}')
             continue
 
-        # 4) Create the locked status task (if not yet present).
-        if not db.session.query(Task).filter_by(device=device, name='status', cron='status').first():
-            task = Task(name='status', cron='status', device=device,
-                        type=TaskType.STATUS.value, locked=True)
-            db.session.add(task)
+        # 4) Create the locked 'system' tasks (if not yet present).
+        ensure_system_tasks_are_created(device)
 
         device.is_online = True
         db.session.commit()

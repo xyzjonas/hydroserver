@@ -9,18 +9,24 @@ class Config(object):
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     DEBUG = True
-    SERIAL_PREFIX = "ttyUSB"
+
+    # Serial connection defaults
+    SERIAL_PREFIX = "ttyUSB"  # used during serial scan
     BAUD_RATE = 19200
-    INVERT_BOOLEAN = True  # Python <--> C - boolean inversion
-    STATUS_OK = "ok"
-    STATUS_FAIL = "error"
+
+    # Device status
+    STATUS_INTERVAL_SECONDS = 10  # i.e. how often is status issued
+    SENSOR_HISTORY_LOGGING_CRON = "* * * * *"  # i.e. how often is sensor's value saved
 
     # Scheduler
     RECONNECT_ATTEMPTS = 10
-    IDLE_INTERVAL_SECONDS = 10
+    IDLE_INTERVAL_SECONDS = STATUS_INTERVAL_SECONDS  # deprecated
     SAFE_INTERVAL = 1.8  # seconds left to ignore and execute right away
     MAX_WORKERS = 4  # max threads to execute simultaneously
 
+    # 'Protocol' settings
+    STATUS_OK = "ok"
+    STATUS_FAIL = "error"
     PRECONFIGURED_COMMAND = {
         "ping": "ping",
         "status": "status",

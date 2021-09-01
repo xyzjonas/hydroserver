@@ -1,6 +1,8 @@
 import json
 import logging
+import math
 from datetime import datetime
+from functools import reduce
 
 from sqlalchemy import event
 from sqlalchemy.orm import relationship
@@ -77,6 +79,8 @@ class Sensor(Base):
     _value = db.Column(db.String(80), default='-1')
     unit = db.Column(db.String(80), nullable=True)
 
+    # history (=backref) - list of historic values
+
     device_id = db.Column(db.Integer, db.ForeignKey('device.id'), nullable=False)
     device = db.relationship('Device',
                              backref=db.backref(
@@ -117,6 +121,25 @@ class Sensor(Base):
         if type(value) not in [bool, int, float]:
             raise TypeError(f"Cannot store '{type(value)}' as sensor value.")
         self._value = str(value)
+
+    def get_last_values(self, since=None, num=None):
+        """Return a desired number of history items as DICT since a specific timestamp"""
+        def reduce_history_item(item):
+            try:
+                return {'timestamp': item.timestamp, 'value': item.value}
+            except (KeyError, AttributeError):
+                return None
+        history = [reduce_history_item(it) for it in self.history]
+        history.sort(key=lambda i: i['timestamp'])
+        if since:
+            history = list(filter(lambda i: i['timestamp'] > since, history))
+        if num and num > len(history):
+            zero_datetime = history[0]['timestamp']
+            return [{'timestamp': zero_datetime, 'value': 0}] * (num - len(history)) + history
+        if num and type(num) is int:
+            each_x = math.ceil(len(history) / num)
+            history = list(filter(lambda i: history.index(i) % each_x == 0, history))
+        return history
 
     @property
     def value_type(self):
@@ -367,6 +390,35 @@ class Device(Base):
             d.is_online = True
             d.last_seen_online = datetime.utcnow()
         return d
+
+
+class HistoryItem(Base):
+    """Stored sensor's history data."""
+    timestamp = db.Column(db.DateTime, nullable=True)
+    _value = db.Column(db.String(80), default='-1')
+
+    sensor_id = db.Column(db.Integer, db.ForeignKey('sensor.id'), nullable=False)
+    sensor = db.relationship(
+        'Sensor', backref=db.backref('history', lazy=False, cascade='all, delete-orphan'))
+
+    @property
+    def dictionary(self):
+        d = self._to_dict()
+        d['value'] = self.value
+        return d
+
+    @property
+    def value(self):
+        """return typed value or string"""
+        try:
+            return self.parse_bool(self._value)
+        except TypeError:
+            pass
+        try:
+            return self.parse_float(self._value)
+        except TypeError:
+            pass
+        return self._value
 
 
 @event.listens_for(Device, "before_insert")

@@ -1,3 +1,4 @@
+import datetime
 import logging
 
 from croniter import croniter, CroniterNotAlphaError, CroniterBadCronError
@@ -9,7 +10,7 @@ from app.main.device_controller import (
     run_scheduler, register_device, scan_devices, refresh_devices
 )
 from app.cache import CACHE
-from app.models import db, Device, Task, Control, Sensor
+from app.models import db, Device, Task, Control, Sensor, HistoryItem
 
 log = logging.getLogger(__name__)
 
@@ -67,6 +68,30 @@ def get_device_sensors(device_id):
     return jsonify([s.dictionary for s in d.sensors])
 
 
+@bp.route('/devices/<int:device_id>/sensors/<int:sensor_id>/history', methods=['GET'])
+def get_device_sensor_history(device_id, sensor_id):
+    # expect milliseconds
+    timestamp_millis_string = request.args.get("since")
+    since_datetime = None
+    if timestamp_millis_string:
+        try:
+            since_datetime = datetime.datetime.fromtimestamp(
+                int(timestamp_millis_string)/1000  # convert millis -> seconds
+            )
+        except (TypeError, ValueError) as e:
+            return f"'{timestamp_millis_string}' Invalid value 'since' supplied: {e}", 400
+    count = None
+    if request.args.get("count"):
+        try:
+            count = int(request.args.get("count"))
+        except (TypeError, ValueError) as e:
+            return f"Invalid value 'count' supplied: {e}", 400
+
+    sensor = db.session.query(Sensor).filter_by(id=_get_id(sensor_id)).first_or_404()
+    items = sensor.get_last_values(since=since_datetime, num=count)
+    return jsonify(items), 200
+
+
 @bp.route('/devices/<int:device_id>/sensors/<int:sensor_id>', methods=['POST'])
 def post_device_sensor(device_id, sensor_id):
     s = db.session.query(Sensor).filter_by(id=_get_id(sensor_id)).first_or_404()
@@ -85,6 +110,7 @@ def post_device_sensor(device_id, sensor_id):
 @bp.route('/devices/<int:device_id>/controls', methods=['GET'])
 def get_device_controls(device_id):
     d = db.session.query(Device).filter_by(id=_get_id(device_id)).first_or_404()
+    db.session.query()
     return jsonify([c.dictionary for c in d.controls])
 
 
@@ -160,7 +186,7 @@ def post_device_tasks(device_id):
         task = Task(device=device)
         created = True
 
-    # SANITAZING input
+    # SANITIZING input
     if data.get("control"):
         control = db.session.query(Control).filter_by(name=data["control"],
                                           device=device).first()

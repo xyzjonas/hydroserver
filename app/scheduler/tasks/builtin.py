@@ -70,6 +70,17 @@ class Status(TaskRunnable):
         return True
 
 
+class HistoryLogger(TaskRunnable):
+    """Log sensor values."""
+    type = TaskType.HISTORY
+
+    @TaskRunnable.update_task_status()
+    def run(self, device: PhysicalDevice):
+        controller = Controller(device=device)
+        controller.log_sensors()
+        return True
+
+
 class Toggle(TaskRunnable):
     """Toggle a switch."""
     type = TaskType.TOGGLE

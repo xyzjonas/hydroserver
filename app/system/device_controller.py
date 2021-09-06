@@ -2,16 +2,16 @@ import datetime
 import logging
 
 from app import db
-from app.cache import CACHE
-from app.device import DeviceType, DeviceException, scan
-from app.device.wifi import WifiDevice
-from app.device.serial import SerialDevice
-from app.device.mock import MockedDevice
+from app.core.cache import CACHE
+from app.core.device import DeviceType, DeviceException, scan
+from app.core.device.http import HttpDevice
+from app.core.device.serial import SerialDevice
+from app.core.device.mock import MockedDevice
 
 from app.models import Device, Control, Task, HistoryItem
-from app.scheduler import Scheduler
-from app.scheduler.tasks import TaskType
-from app.main.device_mapper import DeviceMapper
+from app.core.scheduler import Scheduler
+from app.core.tasks import TaskType
+from app.system.device_mapper import DeviceMapper
 
 log = logging.getLogger(__name__)
 
@@ -76,7 +76,7 @@ class Controller(object):
 
 
 def register_device(url):
-    device = WifiDevice(url=url)
+    device = HttpDevice(url=url)
 
     if not device.is_site_online():
         raise ControllerError(f"Device '{url}' is not responding.")
@@ -193,7 +193,7 @@ def refresh_devices(devices=None, strict=True):
             port, baud = SerialDevice.port_baud(device.url)
             physical_device = SerialDevice(port=port, baud=baud)
         elif type_ == DeviceType.WIFI:
-            physical_device = WifiDevice(device.url)
+            physical_device = HttpDevice(device.url)
         elif type_ == DeviceType.MOCK:
             physical_device = MockedDevice.from_model(device)
         else:

@@ -1,6 +1,6 @@
 import uuid
 
-from app.device import Device, DeviceType, Command
+from app.core.device import Device, DeviceType, Command
 
 
 class MockedDevice(Device):

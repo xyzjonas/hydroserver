@@ -1,7 +1,7 @@
 import pytest
 
-from app.device.wifi import WifiDevice
-from app.device import StatusResponse
+from app.core.device.http import HttpDevice
+from app.core.device import StatusResponse
 
 
 @pytest.mark.parametrize("invalid_url", [
@@ -9,7 +9,7 @@ from app.device import StatusResponse
     "jliajliadjilad"
 ])
 def test_init_invalid_url(invalid_url):
-    dev = WifiDevice(url=invalid_url)
+    dev = HttpDevice(url=invalid_url)
     assert dev
     assert not dev.is_connected
     assert not dev.is_responding

@@ -1,8 +1,8 @@
 from app import db
-from app.device import Device as PhysicalDevice
-from app.main.device_controller import Controller
-from app.models import Task, Device
-from app.scheduler.tasks import TaskRunnable, TaskType, TaskNotCreatedException, TaskException
+from app.core.device import Device as PhysicalDevice
+from app.system.device_controller import Controller
+from app.models import Task
+from app.core.tasks import TaskRunnable, TaskType, TaskNotCreatedException, TaskException
 
 
 class Interval(TaskRunnable):

@@ -1,5 +1,5 @@
 import pytest
-from app.device import DeviceResponse, StatusResponse, Status
+from app.core.device import StatusResponse, Status
 
 
 @pytest.mark.parametrize('data', [

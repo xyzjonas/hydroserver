@@ -4,12 +4,12 @@ import threading
 
 import requests
 
-from app.device import Device, DeviceType, Command, DeviceCommunicationException
+from app.core.device import Device, DeviceType, Command, DeviceCommunicationException
 
 log = logging.getLogger(__name__)
 
 
-class WifiDevice(Device):
+class HttpDevice(Device):
 
     device_type = DeviceType.WIFI
 
@@ -17,7 +17,7 @@ class WifiDevice(Device):
         self.__url = url
         self.lock = threading.Lock()
         self.__uuid = None
-        super(WifiDevice, self).__init__()
+        super(HttpDevice, self).__init__()
 
     def _get_uuid(self):
         return self.__uuid

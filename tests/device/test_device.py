@@ -1,16 +1,16 @@
 import mock
 import pytest
 
-from app.main.device_controller import init_device
-from app.device import DeviceException, DeviceCommunicationException, DeviceResponse
-from app.device import mock, Status
-from app.device.serial import SerialDevice
-from app.device.wifi import WifiDevice
-from app.main.device_mapper import DeviceMapper
+from app.system.device_controller import init_device
+from app.core.device import DeviceException, DeviceCommunicationException, DeviceResponse, mock
+from app.core.device import Status
+from app.core.device.serial import SerialDevice
+from app.core.device.http import HttpDevice
+from app.system.device_mapper import DeviceMapper
 
 
 DEVICES = [
-    WifiDevice(url="http://invalid-url/and/some/path"),
+    HttpDevice(url="http://invalid-url/and/some/path"),
     SerialDevice(port="/dev/ttyUSB999", baud=19200)
 ]
 DEVICES_IDS = [
@@ -33,9 +33,7 @@ def test_init_device(db_setup):
     assert init_device(d)
     device_db = DeviceMapper.from_physical(d).model
     assert device_db
-    assert len(device_db.tasks) == 1
-    assert device_db.tasks[0].cron == 'status'
-    assert device_db.tasks[0].type == 'status'
+    assert len(device_db.tasks) == 2  # status/history
 
 
 @pytest.mark.parametrize("baud", [None, 19200])

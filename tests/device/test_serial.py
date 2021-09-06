@@ -1,9 +1,9 @@
 import pytest
 
-from app.main.device_controller import refresh_devices
-from app.cache import CACHE
-from app.device import DeviceException
-from app.device.serial import SerialDevice
+from app.system.device_controller import refresh_devices
+from app.core.cache import CACHE
+from app.core.device import DeviceException
+from app.core.device.serial import SerialDevice
 
 
 @pytest.mark.parametrize("url_expected", [

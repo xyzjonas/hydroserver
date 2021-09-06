@@ -21,6 +21,7 @@ class Command(Enum):
 class DeviceType(Enum):
     SERIAL = "serial"
     WIFI = "wifi"
+    HTTP = "http"
     ZIGBEE = "zigbee"
     BLUETOOTH = "bluetooth"
     GENERIC = "generic"
@@ -302,8 +303,8 @@ class Device(object):
         return {'request': str(string_requst)}
 
 
-from app.device.serial import scan as serial_scan
-from app.device.mock import scan as mock_scan
+from app.core.device.serial import scan as serial_scan
+from app.core.device.mock import scan as mock_scan
 
 
 def scan():

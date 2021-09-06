@@ -1,16 +1,17 @@
 import datetime
 import logging
+from functools import lru_cache
 
 from croniter import croniter, CroniterNotAlphaError, CroniterBadCronError
 from flask import jsonify, request
 
-from app.main import bp
-from app.main.device_controller import (
+from app.system import bp
+from app.system.device_controller import (
     Controller, ControllerError,
     run_scheduler, register_device, scan_devices, refresh_devices
 )
-from app.cache import CACHE
-from app.models import db, Device, Task, Control, Sensor, HistoryItem
+from app.core.cache import CACHE
+from app.models import db, Device, Task, Control, Sensor
 
 log = logging.getLogger(__name__)
 
@@ -68,9 +69,19 @@ def get_device_sensors(device_id):
     return jsonify([s.dictionary for s in d.sensors])
 
 
+@lru_cache(maxsize=16)
+def cached_call(current_hour, sensor_id, since_, count_):
+    """Cache the least recently called histories. Assuming the client
+    mostly doesn't need very precise data, it can sent rounded-up timestamps.
+    In combination with the current hour datetime, the response can than
+    be cached here, to further lower server load."""
+    sensor = db.session.query(Sensor).filter_by(id=_get_id(sensor_id)).first_or_404()
+    return sensor.get_last_values(since=since_, count=count_)
+
+
 @bp.route('/devices/<int:device_id>/sensors/<int:sensor_id>/history', methods=['GET'])
 def get_device_sensor_history(device_id, sensor_id):
-    # expect milliseconds
+    # expect timestamp in MILLISECONDS, don't make any assumptions
     timestamp_millis_string = request.args.get("since")
     since_datetime = None
     if timestamp_millis_string:
@@ -87,8 +98,10 @@ def get_device_sensor_history(device_id, sensor_id):
         except (TypeError, ValueError) as e:
             return f"Invalid value 'count' supplied: {e}", 400
 
-    sensor = db.session.query(Sensor).filter_by(id=_get_id(sensor_id)).first_or_404()
-    items = sensor.get_last_values(since=since_datetime, num=count)
+    # Cache the result with the current hour datetime as well.
+    now = datetime.datetime.utcnow()
+    now = datetime.datetime(now.year, now.month, now.day, now.hour, 0, 0)
+    items = cached_call(now, sensor_id, since_datetime, count)
     return jsonify(items), 200
 
 
@@ -337,7 +350,7 @@ def device_run_scheduler(device_id):
 
 
 @bp.route('/devices/register', methods=['POST'])
-def register_device_():
+def route_register_device():
     data = request.json
     if not data or 'url' not in data or data.get('url') is None:
         return "'url' field needed.", 400
@@ -351,14 +364,14 @@ def register_device_():
 
 
 @bp.route('/devices/scan', methods=['POST'])
-def scan_devices():
+def route_scan_devices():
     """Performs scan for new (yet unrecognized) devices."""
     found_devices = scan_devices()
     return f"Scan complete, {len(found_devices)} found devices {found_devices}.", 200
 
 
 @bp.route('/devices/<string:device_id>/refresh', methods=['POST'])
-def refresh_device(device_id):
+def route_refresh_device(device_id):
     """Performs the 'init' operation - iterates through DB stored devices and tries
     to initialize them and store in cache (if not already there)."""
     device_db = db.session.query(Device).filter_by(id=_get_id(device_id)).first_or_404()

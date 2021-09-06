@@ -1,5 +1,5 @@
 """Basic tests with mocked device"""
-from app.device import StatusResponse
+from app.core.device import StatusResponse
 
 
 def test_send_status(mocked_device):

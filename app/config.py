@@ -16,7 +16,7 @@ class Config(object):
 
     # Device status
     STATUS_INTERVAL_SECONDS = 10  # i.e. how often is status issued
-    SENSOR_HISTORY_LOGGING_CRON = "* * * * *"  # i.e. how often is sensor's value saved
+    SENSOR_HISTORY_LOGGING_CRON = "*/20 * * * *"  # i.e. how often is sensor's value saved
 
     # Scheduler
     RECONNECT_ATTEMPTS = 10

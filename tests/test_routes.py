@@ -1,9 +1,9 @@
 import random
 import time
 
-from app.main.device_controller import *
-from app.cache import CACHE
-from app.scheduler.tasks import TaskType
+from app.system.device_controller import *
+from app.core.cache import CACHE
+from app.core.tasks import TaskType
 from app.models import Task, HistoryItem
 
 

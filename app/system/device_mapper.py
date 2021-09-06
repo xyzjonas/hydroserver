@@ -1,7 +1,7 @@
 from app import CACHE, db
-from app.device import Device
+from app.core.device import Device
 from app.models import Device
-from app.device import Device as PhysicalDevice
+from app.core.device import Device as PhysicalDevice
 
 
 class DeviceMapper(object):

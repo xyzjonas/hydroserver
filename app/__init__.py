@@ -7,7 +7,7 @@ from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 
-from app.cache import CACHE
+from app.core.cache import CACHE
 from app.config import Config
 
 SCAN_SLEEP = 2
@@ -50,7 +50,7 @@ def create_app(config_class=Config):
     else:
         migrate.init_app(app, db, session_options=opts)
 
-    from app.main import bp as main_bp
+    from app.system import bp as main_bp
     app.register_blueprint(main_bp)
 
     global config
@@ -61,22 +61,6 @@ def create_app(config_class=Config):
 
 
     return app
-
-
-# [1] instantiate the app
-# app = Flask(__name__)
-# app.config.from_object(Config)
-
-
-# def init_device(dev):
-#     status = dev.read_status()
-#     if status.is_success:
-#         d = models.Device.from_status_response(dev, status.data)
-#         db.session.add(d)
-#         db.session.commit()
-#         CACHE.add_active_device(dev)
-#         return True
-#     return False
 
 
 from app import models

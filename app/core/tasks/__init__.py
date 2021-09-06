@@ -103,7 +103,7 @@ class TaskRunnable:
 
     @classmethod
     def from_database_task(cls, task: Task):
-        from app.scheduler.tasks.builtin import Toggle, Status, Interval, HistoryLogger
+        from app.core.tasks.builtin import Toggle, Status, Interval, HistoryLogger
 
         typ = TaskType.from_string(task.type)
         if typ == TaskType.STATUS:

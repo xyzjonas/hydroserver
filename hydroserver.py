@@ -1,7 +1,7 @@
 import sys
 
 from app import create_app
-from app.cache import CACHE
+from app.core.cache import CACHE
 from app.models import db, Device
 
 app = create_app()
@@ -15,9 +15,9 @@ def make_shell_context():
 args = sys.argv
 if 'run' in args:
     # initialize plug-in tasks
-    from app.scheduler.plugins import PLUGIN_MANAGER
+    from app.core.plugins import PLUGIN_MANAGER
     PLUGIN_MANAGER.initialize(app.config['PLUGIN_PATHS'])
 
     # Start-up: loading (health-check) devices from database, caching
-    from app.main.device_controller import refresh_devices
+    from app.system.device_controller import refresh_devices
     refresh_devices()

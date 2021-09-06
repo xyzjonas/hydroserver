@@ -2,8 +2,8 @@ import pytest
 
 from app import db, CACHE
 from app.models import Task, Sensor, Control
-from app.scheduler.tasks import ScheduledTask, TaskType, TaskNotCreatedException, TaskRunnable
-from app.scheduler.tasks.builtin import Status, Toggle, Interval
+from app.core.tasks import ScheduledTask, TaskType, TaskNotCreatedException, TaskRunnable
+from app.core.tasks.builtin import Status, Toggle, Interval
 
 
 def test_from_db_object_status(mocked_device_and_db, task_factory):
@@ -56,10 +56,11 @@ def test_toggle(mocked_device, mocked_device_with_sensor_and_control, task_facto
     CACHE.add_active_device(mocked_device)
     device, sensor, control = mocked_device_with_sensor_and_control
     t = task_factory(device, TaskType.TOGGLE.value, control=control)
+    task_id = t.id
 
-    toggle_task = Toggle(t.id)
+    toggle_task = Toggle(task_id)
     toggle_task.run(mocked_device)
-    task_db = db.session.query(Task).filter_by(id=t.id).first()
+    task_db = db.session.query(Task).filter_by(id=task_id).first()
     assert task_db.last_run
     assert task_db.last_run_success
     assert not task_db.last_run_error
@@ -101,10 +102,11 @@ def test_interval(mocked_device, mocked_device_with_sensor_and_control, task_fac
     t = task_factory(device, TaskType.TOGGLE.value, control=control, sensor=sensor)
     t.task_metadata = {"interval": "10-20"}
     db.session.commit()
+    task_id = t.id
 
     interval_task = Interval(t.id)
     interval_task.run(mocked_device)
-    task_db = db.session.query(Task).filter_by(id=t.id).first()
+    task_db = db.session.query(Task).filter_by(id=task_id).first()
     assert task_db.last_run
     assert task_db.last_run_success
     assert not task_db.last_run_error
@@ -153,10 +155,11 @@ def test_status_no_task(mocked_device_and_db, task_id):
 
 def test_status(mocked_device, mocked_device_and_db, task_factory):
     t = task_factory(mocked_device_and_db, TaskType.STATUS.value)
+    task_id = t.id
 
-    status_task = Status(t.id)
+    status_task = Status(task_id)
     status_task.run(mocked_device)
-    task_db = db.session.query(Task).filter_by(id=t.id).first()
+    task_db = db.session.query(Task).filter_by(id=task_id).first()
     assert task_db.last_run
     assert task_db.last_run_success
     assert not task_db.last_run_error

@@ -9,7 +9,7 @@ import time
 from serial import Serial, SerialException
 
 from app import Config
-from app.device import Device, DeviceType, DeviceException, DeviceCommunicationException,  Command
+from app.core.device import Device, DeviceType, DeviceException, DeviceCommunicationException,  Command
 
 log = logging.getLogger(__name__)
 

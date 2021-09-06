@@ -1,6 +1,6 @@
 import pytest
 
-from app.cache import CACHE
+from app.core.cache import CACHE
 
 
 def test_add(mocked_device):

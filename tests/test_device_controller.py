@@ -1,6 +1,6 @@
 import pytest
 from app import db, CACHE
-from app.main.device_controller import *
+from app.system.device_controller import *
 from app.models import Device, Task
 
 

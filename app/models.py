@@ -2,15 +2,16 @@ import json
 import logging
 import math
 from datetime import datetime
-from functools import reduce
 
 from sqlalchemy import event
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql.expression import or_, and_
 
 from app import db
-from app.cache import CACHE
-from app.device import Device as PhysicalDevice
-from app.device import StatusResponse
+from app.core.cache import CACHE
+from app.core.device import Device as PhysicalDevice
+from app.core.device import StatusResponse
 
 log = logging.getLogger(__name__)
 NOT_APPLICABLE = 'N/A'
@@ -129,23 +130,35 @@ class Sensor(Base):
             raise TypeError(f"Cannot store '{type(value)}' as sensor value.")
         self._value = str(value)
 
-    def get_last_values(self, since=None, num=None):
+    def get_last_values(self, since=None, count=None):
         """Return a desired number of history items as DICT since a specific timestamp"""
         def reduce_history_item(item):
             try:
                 return {'timestamp': item.timestamp, 'value': item.value}
             except (KeyError, AttributeError):
                 return None
-        history = [reduce_history_item(it) for it in self.history]
-        history.sort(key=lambda i: i['timestamp'])
+
         if since:
-            history = list(filter(lambda i: i['timestamp'] > since, history))
-        if num and num > len(history):
-            zero_datetime = history[0]['timestamp']
-            return [{'timestamp': zero_datetime, 'value': 0}] * (num - len(history)) + history
-        if num and type(num) is int:
-            each_x = math.ceil(len(history) / num)
-            history = list(filter(lambda i: history.index(i) % each_x == 0, history))
+            history = db.session.query(HistoryItem) \
+                .filter(
+                    HistoryItem.sensor == self,
+                    HistoryItem.timestamp >= since
+                ).all()
+            history = [reduce_history_item(it) for it in history]
+        else:
+            history = [reduce_history_item(it) for it in self.history]
+        history.sort(key=lambda i: i['timestamp'])
+        if not history:
+            return []
+
+        if count and count < len(history):
+            def takespread(sequence, num):
+                """Get n-th value generator"""
+                length = float(len(sequence))
+                for i in range(num):
+                    yield sequence[int(math.ceil(i * length / num))]
+            gen = takespread(history, count)
+            history = [next(gen) for _ in range(count)]
         return history
 
     @property
@@ -397,6 +410,7 @@ class Device(Base):
                        type=device.device_type.value,
                        url=device.url)
             db.session.add(d)
+            db.session.commit()  # commit the new device to create its ID
         if d:
             d.update_commands(status.controls)
             d.update_commands(status.sensors)

@@ -5,7 +5,7 @@ from inspect import isclass
 
 from pluginbase import PluginBase
 
-from app.scheduler import tasks
+from app.core import tasks
 
 log = logging.getLogger(__name__)
 

@@ -1,5 +1,7 @@
 import pytest
+
 from app.models import Device
+from app import db
 
 
 def test_get(mocked_device_with_sensor_and_control):

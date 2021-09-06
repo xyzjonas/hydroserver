@@ -2,9 +2,10 @@ import pytest
 
 from app import create_app, db
 from app.config import TestConfig
-from app.device import serial, mock, wifi
-from app.main.device_controller import init_device
-from app.main.device_mapper import DeviceMapper
+from app.core.device import serial, mock
+from app.core.device import http
+from app.system.device_controller import init_device
+from app.system.device_mapper import DeviceMapper
 from app.models import Control, Sensor, Task, Device
 from tests.constants import WIFI_DEVICE
 
@@ -81,7 +82,7 @@ def actual_serial_device_and_db(actual_serial_device, db_setup):
 # WIFI
 @pytest.fixture()
 def actual_wifi_device():
-    wifi_device = wifi.WifiDevice(url=WIFI_DEVICE)
+    wifi_device = http.HttpDevice(url=WIFI_DEVICE)
     if not wifi_device.is_site_online():
         pytest.skip("An actual connected wifi device is needed for this test.")
     return wifi_device

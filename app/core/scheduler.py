@@ -8,10 +8,10 @@ from datetime import datetime, timedelta
 from flask import current_app
 
 from app import db
-from app.cache import CACHE
-from app.device import Device as PhysicalDevice
-from app.main.device_mapper import DeviceMapper
-from app.scheduler.tasks import ScheduledTask, TaskNotCreatedException
+from app.core.cache import CACHE
+from app.core.device import Device as PhysicalDevice
+from app.system.device_mapper import DeviceMapper
+from app.core.tasks import ScheduledTask, TaskNotCreatedException
 
 log = logging.getLogger(__name__)
 

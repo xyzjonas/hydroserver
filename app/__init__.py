@@ -53,6 +53,9 @@ def create_app(config_class=Config):
     from app.system import bp as main_bp
     app.register_blueprint(main_bp)
 
+    from app.grow import bp as grow_bp
+    app.register_blueprint(grow_bp)
+
     global config
     config = app.config
 
@@ -64,3 +67,4 @@ def create_app(config_class=Config):
 
 
 from app import models
+from app.grow import models

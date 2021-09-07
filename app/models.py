@@ -187,7 +187,7 @@ class Control(Base):
 
     device_id = db.Column(db.Integer, db.ForeignKey('device.id'), nullable=False)
     device = db.relationship('Device',
-                             backref=db.backref('controls', lazy=False, cascade='all, delete-orphan'))
+                             backref=db.backref('controls', lazy=False))
 
     def __repr__(self):
         return f"<Control (name={self.name}, device={self.device_id})>"

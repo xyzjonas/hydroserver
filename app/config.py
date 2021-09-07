@@ -36,6 +36,39 @@ class Config(object):
 
     PLUGIN_PATHS = ["/home/jobrauer/Documents/app_pluginsqapwo"]
 
+    # High level user definition of devices/attributes
+    DEFAULT_ATTRIBUTES = {
+        'ec': {
+            'description': 'nothing of importance'
+        },
+        'ph': {
+            'description': 'nothing of importance'
+        },
+        'reservoir': {
+            'description': 'nothing of importance'
+        },
+        'light': {
+            'description': 'nothing of importance'
+        },
+        'water_flow': {
+            'description': 'nothing of importance'
+        },
+        'water_temperature': {
+            'description': 'nothing of importance'
+        },
+        'air_temperature': {
+            'description': 'nothing of importance'
+        },
+        'air_humidity': {
+            'description': 'nothing of importance'
+        },
+    }
+    DEFAULT_SYSTEMS = {
+        'NFT': {
+            'required_attributes': ['ec', 'ph', 'reservoir']
+        }
+    }
+
 
 class TestConfig(Config):
     TESTING = True

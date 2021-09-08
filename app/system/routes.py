@@ -48,8 +48,11 @@ def all_devices():
 
 @bp.route('/devices/<int:device_id>', methods=['GET'])
 def get_device(device_id):
-    d = db.session.query(Device).filter_by(id=_get_id(device_id)).first_or_404()
-    return jsonify(d.dictionary)
+    device = db.session.query(Device).filter_by(id=_get_id(device_id)).first_or_404()
+    data = device.dictionary
+    # show only in single device resource
+    data['grow_system'] = device.get_grow_system()
+    return jsonify(data)
 
 
 @bp.route('/devices/<int:device_id>', methods=['DELETE'])

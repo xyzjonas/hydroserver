@@ -37,37 +37,50 @@ class Config(object):
     PLUGIN_PATHS = ["/home/jobrauer/Documents/app_pluginsqapwo"]
 
     # High level user definition of devices/attributes
-    DEFAULT_ATTRIBUTES = {
-        'ec': {
+    DEFAULT_GROW_PROPERTIES = [
+        {
+            'name': 'EC',
+            'color': '#ff6f00',
+            'description': 'nothing of importance',
+        },
+        {
+            'name': 'pH',
+            'color': '#82caaf',
             'description': 'nothing of importance'
         },
-        'ph': {
+        {
+            'name': 'water flow',
+            'description': 'nothing of importance',
+            'color': '#194a8d'
+        },
+        {
+            'name': 'reservoir',
+            'color': '#75c0e0',
+            'description': 'reservoir capacity'
+        },
+        {
+            'name': 'water temperature',
             'description': 'nothing of importance'
         },
-        'reservoir': {
+        {
+            'name': 'air temperature',
             'description': 'nothing of importance'
         },
-        'light': {
+        {
+            'name': 'air humidity',
             'description': 'nothing of importance'
         },
-        'water_flow': {
-            'description': 'nothing of importance'
+    ]
+    DEFAULT_SYSTEMS = [
+        {
+            'name': 'NFT',
+            'required_properties': ['EC', 'pH', 'reservoir', 'water flow']
         },
-        'water_temperature': {
-            'description': 'nothing of importance'
-        },
-        'air_temperature': {
-            'description': 'nothing of importance'
-        },
-        'air_humidity': {
-            'description': 'nothing of importance'
-        },
-    }
-    DEFAULT_SYSTEMS = {
-        'NFT': {
-            'required_attributes': ['ec', 'ph', 'reservoir']
+        {
+            'name': 'Grow tent',
+            'required_properties': ['air temperature', 'air humidity']
         }
-    }
+    ]
 
 
 class TestConfig(Config):

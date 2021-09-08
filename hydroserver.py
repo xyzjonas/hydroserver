@@ -21,3 +21,9 @@ if 'run' in args:
     # Start-up: loading (health-check) devices from database, caching
     from app.system.device_controller import refresh_devices
     refresh_devices()
+    from app.grow.models import load_from_lists
+    load_from_lists(
+        properties=app.config.get("DEFAULT_GROW_PROPERTIES"),
+        systems=app.config.get("DEFAULT_SYSTEMS")
+    )
+

@@ -54,7 +54,7 @@ def create_app(config_class=Config):
     app.register_blueprint(main_bp)
 
     from app.grow import bp as grow_bp
-    app.register_blueprint(grow_bp)
+    app.register_blueprint(grow_bp, url_prefix='/grow')
 
     global config
     config = app.config

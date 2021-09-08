@@ -6,6 +6,7 @@ from datetime import datetime
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import relationship
+from sqlalchemy.orm.collections import InstrumentedList
 from sqlalchemy.sql.expression import or_, and_
 
 from app import db
@@ -37,9 +38,17 @@ class Base(db.Model):
             value = self.__getattribute__(attribute)
             if type(value) in [dict, list, bool] or value is None:
                 result[attribute] = value
+            elif issubclass(value.__class__, InstrumentedList):
+                result[attribute] = [item.dictionary for item in list(value)]
+            elif issubclass(value.__class__, Base):
+                result[attribute] = value.dictionary
             else:
                 result[attribute] = str(value)
         return result
+
+    @property
+    def dictionary(self):
+        return self._to_dict()
 
     @staticmethod
     def parse_bool(value):
@@ -79,7 +88,7 @@ class Sensor(Base):
     """
     A Read only sensor on the device (e.g. a temperature sensor)
     """
-    __items__ = Base.__items__.extend(['id', 'name', 'description', 'unit'])
+    __items__ = Base.__items__ + ['id', 'name', 'description', 'unit']
 
     name = db.Column(db.String(80), nullable=False)
     description = db.Column(db.String(80), nullable=True)
@@ -187,7 +196,7 @@ class Control(Base):
 
     device_id = db.Column(db.Integer, db.ForeignKey('device.id'), nullable=False)
     device = db.relationship('Device',
-                             backref=db.backref('controls', lazy=False, cascade='all, delete-orphan'))
+                             backref=db.backref('controls', lazy=False))
 
     def __repr__(self):
         return f"<Control (name={self.name}, device={self.device_id})>"
@@ -345,6 +354,15 @@ class Device(Base):
             data = json.loads(self._unknown_commands)
         data[command] = value
         self._unknown_commands = json.dumps(data)
+
+    def get_grow_system(self):
+        if not self.grow_system:
+            return None
+        # Bug? uselist=False is set, but it is still a list here...
+        if issubclass(self.grow_system.__class__, list):
+            return self.grow_system[0].dictionary
+
+        return self.grow_system.dictionary
 
     @property
     def dictionary(self):

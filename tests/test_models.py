@@ -35,7 +35,7 @@ def test_task_metadata_negative(task, meta):
     assert task.task_metadata == {}
 
 
-def test_dictionary(task):
+def test_task_dictionary(task):
     """
         @property
     def dictionary(self):

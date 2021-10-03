@@ -7,6 +7,14 @@ from app.core.tasks import TaskType
 from app.models import Task, HistoryItem
 
 
+def test_root(app_setup):
+    with app_setup.test_client() as client:
+        r = client.get('/')
+        assert r.status_code == 200
+        assert r.json['tasks']
+        assert all([task_name in r.json['tasks'] for task_name in ['status', 'history']])
+
+
 def test_get_devices(db_setup, app_setup, mocked_device):
     init_device(mocked_device)
     url = "/devices"

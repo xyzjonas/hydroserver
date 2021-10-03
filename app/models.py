@@ -4,10 +4,8 @@ import math
 from datetime import datetime
 
 from sqlalchemy import event
-from sqlalchemy.engine import Engine
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.collections import InstrumentedList
-from sqlalchemy.sql.expression import or_, and_
 
 from app import db
 from app.core.cache import CACHE
@@ -186,7 +184,7 @@ class Control(Base):
     """
     A controllable entity on the device (e.g. a switch)
     """
-    __items__ = None
+    __items__ = Base.__items__ + ['name', 'description', 'input']
 
     name = db.Column(db.String(80), nullable=False)
     description = db.Column(db.String(80), nullable=True)
@@ -196,7 +194,8 @@ class Control(Base):
 
     device_id = db.Column(db.Integer, db.ForeignKey('device.id'), nullable=False)
     device = db.relationship('Device',
-                             backref=db.backref('controls', lazy=False))
+                             backref=db.backref(
+                                 'controls', lazy=False, cascade='all, delete-orphan'))
 
     def __repr__(self):
         return f"<Control (name={self.name}, device={self.device_id})>"
@@ -231,7 +230,9 @@ class Task(Base):
     """
     A schedule-able action to be performed on the device
     """
-    __items__ = None
+    __items__ = Base.__items__ + ['name', 'cron', 'type', 'locked',
+                                  'paused', 'last_run', 'last_run_success', 'last_run_error',
+                                  'control', 'sensor', 'device_id']
 
     name = db.Column(db.String(80), default="Unnamed task")
     cron = db.Column(db.String(80), default="* * * * *")  # cron signature or 'status' keyword

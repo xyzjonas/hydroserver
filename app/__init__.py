@@ -7,6 +7,7 @@ from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 
+
 from app.core.cache import CACHE
 from app.config import Config
 
@@ -59,9 +60,10 @@ def create_app(config_class=Config):
     global config
     config = app.config
 
+    from app.core.plugins import plugin_manager
+    plugin_manager.initialize()
+
     CORS(app, resources={r'/*': {'origins': '*'}})
-
-
 
     return app
 

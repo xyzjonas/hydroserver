@@ -28,14 +28,13 @@ class TaskType(Enum):
     INTERVAL = "interval"
     STATUS = "status"
     HISTORY = "history"
-    GENERIC = "generic"
 
     @classmethod
     def from_string(cls, string):
         try:
             return TaskType(string)
         except ValueError:
-            return TaskType.GENERIC
+            return None
 
 
 class ScheduledTask:
@@ -81,6 +80,9 @@ class ScheduledTask:
 
 
 class TaskRunnable:
+    """
+    Represents the actual operation to be executed. String 'type' is required.
+    """
 
     log = logging.getLogger(__name__)
 
@@ -103,20 +105,13 @@ class TaskRunnable:
 
     @classmethod
     def from_database_task(cls, task: Task):
-        from app.core.tasks.builtin import Toggle, Status, Interval, HistoryLogger
-
-        typ = TaskType.from_string(task.type)
-        if typ == TaskType.STATUS:
-            return Status(task.id)
-        if typ == TaskType.HISTORY:
-            return HistoryLogger(task.id)
-        elif typ == TaskType.TOGGLE:
-            return Toggle(task.id)
-        elif typ == TaskType.INTERVAL:
-            return Interval(task.id)
-        else:
-            # todo: instantiate generic (user-added) task by name
-            raise TaskNotCreatedException(f"Unknown task type")
+        from app.core.plugins import plugin_manager
+        type_ = task.type
+        if type_ not in plugin_manager.available_tasks:
+            raise TaskNotCreatedException(f"Unknown task type '{type_}'")
+        assert task.id
+        instance = plugin_manager.get_class(type_)(task.id)
+        return instance
 
     @staticmethod
     def update_task_status():

@@ -7,7 +7,7 @@ from app.core.tasks import TaskRunnable, TaskType, TaskNotCreatedException, Task
 
 class Interval(TaskRunnable):
     """Toggles the control based on a sensors value (tries to keep it inside the interval)."""
-    type = TaskType.INTERVAL  # todo: needed?
+    type = TaskType.INTERVAL.value
 
     @staticmethod
     def __parse_interval(string):
@@ -62,7 +62,7 @@ class Interval(TaskRunnable):
 
 class Status(TaskRunnable):
     """Just read the status & update."""
-    type = TaskType.STATUS
+    type = TaskType.STATUS.value
 
     @TaskRunnable.update_task_status()
     def run(self, device: PhysicalDevice):
@@ -72,7 +72,7 @@ class Status(TaskRunnable):
 
 class HistoryLogger(TaskRunnable):
     """Log sensor values."""
-    type = TaskType.HISTORY
+    type = TaskType.HISTORY.value
 
     @TaskRunnable.update_task_status()
     def run(self, device: PhysicalDevice):
@@ -83,10 +83,10 @@ class HistoryLogger(TaskRunnable):
 
 class Toggle(TaskRunnable):
     """Toggle a switch."""
-    type = TaskType.TOGGLE
+    type = TaskType.TOGGLE.value
 
     def __init__(self, task_id: int):
-        super().__init__(task_id)
+        super(Toggle, self).__init__(task_id)
         self.task = db.session.query(Task).filter_by(id=task_id).first()
         if not self.task.control:
             raise TaskNotCreatedException(f"Control needed for '{self.type}' task.")

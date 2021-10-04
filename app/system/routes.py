@@ -5,6 +5,7 @@ from functools import lru_cache
 from croniter import croniter, CroniterNotAlphaError, CroniterBadCronError
 from flask import jsonify, request
 
+from app.core.plugins import plugin_manager
 from app.system import bp
 from app.system.device_controller import (
     Controller, ControllerError,
@@ -34,7 +35,8 @@ def root():
     data = {
         'version': '0.0.1',
         'up-time': 2123452,
-        'active devices': [str(d) for d in CACHE.get_all_active_devices()]
+        'active devices': [str(d) for d in CACHE.get_all_active_devices()],
+        'tasks': sorted(plugin_manager.available_tasks)
     }
     return jsonify(data)
 

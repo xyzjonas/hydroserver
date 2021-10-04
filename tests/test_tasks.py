@@ -19,32 +19,6 @@ def test_from_db_object_status_cron(mocked_device_and_db, task_factory):
     assert sch
 
 
-def test_from_db_object_toggle(mocked_device_and_db):
-    db_device = mocked_device_and_db
-    task = Task(device=db_device)
-    task.type = TaskType.TOGGLE.value
-    task.cron = "* * * * *"
-    task.control = Control(name="control", device=db_device)
-    db.session.commit()
-
-    sch = ScheduledTask.from_db_object(task)
-    assert sch
-
-
-def test_from_db_object_interval(mocked_device_and_db):
-    db_device = mocked_device_and_db
-    task = Task(device=db_device)
-    task.type = TaskType.INTERVAL.value
-    task.cron = "* * * * *"
-    task.sensor = Sensor(name="sensor", device=db_device)
-    task.control = Control(name="control", device=db_device)
-    task.task_metadata = {"interval": "10-20"}
-    db.session.commit()
-
-    sch = ScheduledTask.from_db_object(task)
-    assert sch
-
-
 @pytest.mark.parametrize("task_type", [None, "", 123, -10, "asjdsa"])
 def test_runnable_from_database_task_negative(mocked_device_and_db, task_factory, task_type):
     t = task_factory(mocked_device_and_db, task_type)
@@ -75,26 +49,39 @@ def test_toggle_no_control(mocked_device, mocked_device_with_sensor_and_control,
         Toggle(t.id)
 
 
-def test_toggle_from_database_task(mocked_device_with_sensor_and_control,
-                                   task_factory):
-    device, s, c = mocked_device_with_sensor_and_control
-    t = task_factory(device, TaskType.TOGGLE.value, control=c)
-    assert type(TaskRunnable.from_database_task(t)) is Toggle
-
-
 @pytest.mark.parametrize("task_id", [None, "", "adasd", -10])
 def test_toggle_no_task(db_setup, task_id):
     with pytest.raises(TaskNotCreatedException):
         Toggle(task_id)
 
 
-def test_interval_from_database_task(mocked_device_with_sensor_and_control,
-                                     task_factory):
+@pytest.mark.parametrize('task_type', [type_.value for type_ in TaskType])
+def test_scheduler_task_from_db_object(mocked_device_with_sensor_and_control,
+                                       task_factory, task_type):
     device, s, c = mocked_device_with_sensor_and_control
-    t = task_factory(device, TaskType.INTERVAL.value, control=c, sensor=s)
-    t.task_metadata = {"interval": "10-20"}
-    db.session.commit()
-    assert type(TaskRunnable.from_database_task(t)) is Interval
+    task = task_factory(device,
+                        task_type,
+                        control=c,
+                        sensor=s,
+                        meta={"interval": "10-20"})
+    assert task.id
+    sch = ScheduledTask.from_db_object(task)
+    assert sch
+
+
+@pytest.mark.parametrize('task_type', [type_.value for type_ in TaskType])
+def test_builtin_from_database_task(mocked_device_with_sensor_and_control,
+                                    task_factory, task_type):
+    device, s, c = mocked_device_with_sensor_and_control
+    t = task_factory(device,
+                     task_type,
+                     control=c,
+                     sensor=s,
+                     meta={"interval": "10-20"})
+    assert t.id
+    runnable = TaskRunnable.from_database_task(t)
+    assert runnable
+    assert runnable.type == task_type
 
 
 def test_interval(mocked_device, mocked_device_with_sensor_and_control, task_factory):
@@ -140,11 +127,6 @@ def test_interval_no_sensor(mocked_device, mocked_device_with_sensor_and_control
     t.task_metadata = {"interval": "10-20"}
     with pytest.raises(TaskNotCreatedException, match="Sensor needed for"):
         Interval(t.id)
-
-
-def test_status_from_database_task(mocked_device_and_db, task_factory):
-    t = task_factory(mocked_device_and_db, TaskType.STATUS.value)
-    assert type(TaskRunnable.from_database_task(t)) is Status
 
 
 @pytest.mark.parametrize("task_id", [None, "", "adasd", -10])

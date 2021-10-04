@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import date
 
 from flask import Flask
@@ -6,6 +7,7 @@ from flask.json import JSONEncoder
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
+
 
 from app.core.cache import CACHE
 from app.config import Config
@@ -38,6 +40,10 @@ class CustomJSONEncoder(JSONEncoder):
 def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
+    # if env var is not set, skip. Otherwise we want an explicit fail.
+    if os.getenv('HYDROSERVER_CONFIG', None):
+        log.info(f"CUSTOM CONFIG: {os.getenv('HYDROSERVER_CONFIG')}")
+        app.config.from_envvar('HYDROSERVER_CONFIG', silent=False)
 
     db.init_app(app)
     db.app = app  # global db
@@ -59,9 +65,10 @@ def create_app(config_class=Config):
     global config
     config = app.config
 
+    from app.core.plugins import plugin_manager
+    plugin_manager.initialize()
+
     CORS(app, resources={r'/*': {'origins': '*'}})
-
-
 
     return app
 

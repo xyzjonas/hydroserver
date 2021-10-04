@@ -15,8 +15,8 @@ def make_shell_context():
 args = sys.argv
 if 'run' in args:
     # initialize plug-in tasks
-    from app.core.plugins import PLUGIN_MANAGER
-    PLUGIN_MANAGER.initialize(app.config['PLUGIN_PATHS'])
+    # from app.core.plugins import PLUGIN_MANAGER
+    # PLUGIN_MANAGER.initialize(app.config['PLUGIN_PATHS'])
 
     # Start-up: loading (health-check) devices from database, caching
     from app.system.device_controller import refresh_devices

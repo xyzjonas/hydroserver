@@ -1,7 +1,7 @@
 import pytest
 
 from app import db, CACHE
-from app.models import Task, Sensor, Control
+from app.models import Task
 from app.core.tasks import ScheduledTask, TaskType, TaskNotCreatedException, TaskRunnable
 from app.core.tasks.builtin import Status, Toggle, Interval
 
@@ -136,6 +136,7 @@ def test_status_no_task(mocked_device_and_db, task_id):
 
 
 def test_status(mocked_device, mocked_device_and_db, task_factory):
+    CACHE.add_active_device(mocked_device)
     t = task_factory(mocked_device_and_db, TaskType.STATUS.value)
     task_id = t.id
 

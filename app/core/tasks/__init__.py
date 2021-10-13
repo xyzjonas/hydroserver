@@ -54,13 +54,11 @@ class ScheduledTask:
         return hash(self.task_id) ^ hash(self.scheduled_time)
 
     def __repr__(self):
-        return f"<{__name__} (id={self.task_id}, time={self.scheduled_time})>"
+        return f"<{self.runnable.type or 'N/A'} (id={self.task_id}, time={self.scheduled_time})>"
 
     @classmethod
     def from_db_object(cls, task_db: Task):
         """Create the object and calculate next scheduled time."""
-        if task_db.paused:
-            return None
         try:
             # if cron is set to 'status', run each 10s todo: configurable
             if task_db.cron == 'status':

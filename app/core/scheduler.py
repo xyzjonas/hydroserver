@@ -23,8 +23,7 @@ class Scheduler:
     """
 
     def __init__(self, device: PhysicalDevice):
-        self.device = device
-        self.device_uuid = self.device.uuid
+        self.device = DeviceMapper.from_uuid(device.uuid)
         self.__running = False
         self.__should_be_running = False
 
@@ -38,13 +37,14 @@ class Scheduler:
         self.__last_executed = set()
 
     def __repr__(self):
-        return f"<Scheduler (device={self.device}, running={self.__running})>"
+        return f"<Scheduler (device={self.device.model}, running={self.__running})>"
 
     def start(self):
         if self.is_running:
             return
         self.__should_be_running = True
 
+        self._clear_scheduler_error()
         def try_run():
             try:
                 self.__loop()
@@ -70,7 +70,7 @@ class Scheduler:
         """
         :rtype: set
         """
-        dev = DeviceMapper.from_uuid(self.device_uuid).model
+        dev = self.device.model
 
         def __sanitize(task):
             try:
@@ -84,26 +84,30 @@ class Scheduler:
         return {task for task in [__sanitize(t) for t in dev.tasks] if task}
 
     def _set_device_offline(self):
-        dev = DeviceMapper.from_uuid(self.device_uuid).model
+        dev = self.device.model
         dev.is_online = False
         db.session.commit()
 
     def _set_scheduler_error(self, cause):
-        """Scheduler callback"""
-        dev = DeviceMapper.from_uuid(self.device_uuid).model
+        dev = self.device.model
         dev.scheduler_error = str(cause)
+        db.session.commit()
+
+    def _clear_scheduler_error(self):
+        dev = self.device.model
+        dev.scheduler_error = None
         db.session.commit()
 
     def __execute(self, task):
         """'execute task' function to be spawned in the thread executor."""
         self.__last_executed.add(task)
-        task.runnable.run(self.device)
+        task.runnable.run(self.device.model)
 
     def __stop_scheduler(self):
         """Scheduler stops itself from within the run loop."""
         self.executor.shutdown(wait=True)
         self.__running = False
-        CACHE.remove_scheduler(self.device_uuid)
+        CACHE.remove_scheduler(self.device.uuid)
 
     def __loop(self):
         """
@@ -117,7 +121,7 @@ class Scheduler:
         self.__running = True
         while self.__should_be_running:
             # 1) Health-check
-            if not self.device.health_check():
+            if not self.device.physical.health_check():
                 self._set_device_offline()
                 attempts += 1
                 if attempts > self.RECONNECT_ATTEMPTS:
@@ -125,7 +129,7 @@ class Scheduler:
                     self.executor.shutdown(wait=True)
                     self.__running = False
                     self.__should_be_running = False
-                    CACHE.remove_scheduler(self.device_uuid)
+                    CACHE.remove_scheduler(self.device.uuid)
                     return
                 to_be_scheduled = set()
                 log.warning(f"{self}: device offline, schedule cleared "

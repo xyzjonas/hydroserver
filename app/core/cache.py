@@ -13,15 +13,16 @@ class Cache:
         self.lock = threading.Lock()
 
     def get_all_active_devices(self):
-        with self.lock:
-            return list(self.__active_devices.values())
+        return list(self.__active_devices.values())
 
-    def get_active_device(self, device):
-        return self.get_active_device_by_uuid(self.__sanitize(device).uuid)
+    def get_active_device(self, device, strict=False):
+        return self.get_active_device_by_uuid(self.__sanitize(device).uuid, strict=strict)
 
-    def get_active_device_by_uuid(self, uuid):
-        with self.lock:
-            return self.__active_devices.get(uuid)
+    def get_active_device_by_uuid(self, uuid, strict=False):
+        dev = self.__active_devices.get(uuid)
+        if not dev and strict:
+            raise KeyError(f'No such active device cached: {uuid}')
+        return dev
 
     def add_active_device(self, device):
         with self.lock:

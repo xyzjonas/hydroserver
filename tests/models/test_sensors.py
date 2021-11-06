@@ -1,5 +1,3 @@
-import math
-
 import pytest
 import random
 import timeit
@@ -7,6 +5,18 @@ from datetime import datetime
 
 from app import db
 from app.models import HistoryItem
+
+
+@pytest.fixture()
+def sensor_and_history(mocked_device_with_sensor_and_control):
+    _, sensor, _ = mocked_device_with_sensor_and_control
+    history_values = []
+    for _ in range(100):
+        val = random.randint(0, 100)
+        history_values.append(val)
+        db.session.add(HistoryItem(sensor=sensor, _value=val, timestamp=datetime.utcnow()))
+    db.session.commit()
+    return sensor, history_values
 
 
 @pytest.mark.parametrize("data_since_expected", [
@@ -86,3 +96,16 @@ def test_sensor_query_performance(mocked_device_with_sensor_and_control, count):
     y = timeit.timeit(stmt=y_test_code, number=repeat)
     print("\nTIME Y: {}".format(y / repeat))
 
+
+@pytest.mark.parametrize('count', [110, 50, 33])
+def test_recent_average(sensor_and_history, count):
+    sensor, values = sensor_and_history
+    values.reverse()
+    values = values[:count]
+    expected_avg = sum(values) / len(values)
+    assert sensor.get_recent_average(count=count) == expected_avg
+
+
+def test_recent_average_no_history(mocked_device_with_sensor_and_control):
+    _, sensor, _ = mocked_device_with_sensor_and_control
+    assert sensor.get_recent_average() == 0

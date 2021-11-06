@@ -3,7 +3,7 @@ import logging
 import math
 from datetime import datetime
 
-from sqlalchemy import event
+from sqlalchemy import event, desc
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.collections import InstrumentedList
 
@@ -87,6 +87,7 @@ class Sensor(Base):
     A Read only sensor on the device (e.g. a temperature sensor)
     """
     __items__ = Base.__items__ + ['id', 'name', 'description', 'unit']
+    __last_few_values = []
 
     name = db.Column(db.String(80), nullable=False)
     description = db.Column(db.String(80), nullable=True)
@@ -136,6 +137,16 @@ class Sensor(Base):
         if type(value) not in [bool, int, float]:
             raise TypeError(f"Cannot store '{type(value)}' as sensor value.")
         self._value = str(value)
+
+    def get_recent_average(self, count=5):
+        history = db.session.query(HistoryItem) \
+            .filter(HistoryItem.sensor == self) \
+            .order_by(desc(HistoryItem.id)) \
+            .limit(count) \
+            .all()
+
+        avg = sum([item.value for item in history]) / (len(history) or 1)
+        return avg
 
     def get_last_values(self, since=None, count=None):
         """Return a desired number of history items as DICT since a specific timestamp"""

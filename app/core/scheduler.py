@@ -45,6 +45,7 @@ class Scheduler:
         self.__should_be_running = True
 
         self._clear_scheduler_error()
+
         def try_run():
             try:
                 self.__loop()
@@ -101,7 +102,9 @@ class Scheduler:
     def __execute(self, task):
         """'execute task' function to be spawned in the thread executor."""
         self.__last_executed.add(task)
-        task.runnable.run(self.device.model)
+        log.debug(
+            f"{self.device.model.name}: executing '{task.runnable.type}' task (id={task.id})")
+        task.runnable.run(self.device.physical)
 
     def __stop_scheduler(self):
         """Scheduler stops itself from within the run loop."""

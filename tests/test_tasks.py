@@ -84,8 +84,14 @@ def test_builtin_from_database_task(mocked_device_with_sensor_and_control,
     assert runnable.type == task_type
 
 
-def test_interval(mocked_device, mocked_device_with_sensor_and_control, task_factory):
+@pytest.mark.parametrize('input_type,value', [('bool', 'True'), ('float', '0.33')])
+def test_interval(mocked_device,
+                  mocked_device_with_sensor_and_control,
+                  task_factory, input_type, value
+                  ):
     device, sensor, control = mocked_device_with_sensor_and_control
+    control.input = input_type
+    control.value = value
     t = task_factory(device, TaskType.TOGGLE.value, control=control, sensor=sensor)
     t.task_metadata = {"interval": "10-20"}
     db.session.commit()

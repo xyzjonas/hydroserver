@@ -1,7 +1,7 @@
+import functools
 import logging
 import math
 import traceback
-from contextlib import wraps
 from datetime import datetime
 from enum import Enum
 
@@ -116,7 +116,7 @@ class TaskRunnable:
         """Decorate run methods to update task state
         and prevent unexpected failures."""
         def decorate(func):
-            @wraps(func)
+            @functools.wraps(func)
             def wrapper(*args, **kwargs):
                 task_id = None
                 try:

@@ -4,7 +4,7 @@ from flask import jsonify, request
 
 from app import db
 from app.grow import bp
-from app.grow.models import GrowSystem, GrowSystemInstance, GrowPropertyInstance, GrowProperty
+from app.grow.models import GrowSystem, GrowSystemInstance, GrowPropertyInstance
 from app.models import Device
 from app.utils import parse_id_as_int
 
@@ -38,7 +38,7 @@ def assign_system_to_device(device_id):
     Create a GrowSystemInstance based on the selected Grow instance.
     """
     device_id = parse_id_as_int(device_id)
-    device = db.session.query(Device).filter_by(id=device_id).first_or_404()
+    db.session.query(Device).filter_by(id=device_id).first_or_404()
     data = request.json
     if not data:
         return f'data is empty', 400
@@ -91,6 +91,3 @@ def assign_control(device_id, property_id):
     property_instance.sensor_id = data['sensor_id']
     db.session.commit()
     return "Assigned.", 200
-
-
-

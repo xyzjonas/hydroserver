@@ -1,11 +1,12 @@
 # Service settings for my RPi
 [Unit]
-Description=<a description of your application>
+Description=Hydroserver backend Flask server
 After=network.target
 
 [Service]
-User=jonas
+User=<user>
 WorkingDirectory=/opt/hydroserver
+Environment="HYDROSERVER_CONFIG=<path-to-config>"
 ExecStart=/opt/hydroserver/venv/bin/gunicorn -b localhost:8000  hydroserver:app
 Restart=always
 

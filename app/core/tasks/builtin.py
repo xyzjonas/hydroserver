@@ -37,8 +37,7 @@ class Interval(TaskRunnable):
             raise TaskNotCreatedException(f"'interval' field needed for '{self.type}' task.")
         self.interval = Interval.__parse_interval(task.task_metadata["interval"])
 
-    @TaskRunnable.update_task_status()
-    def run(self, device: PhysicalDevice):
+    def _run(self, device: PhysicalDevice):
         """
         Use interval (e.g. 10-20) to either turn on/off or adjust control
         (depending on control type). In case of 'numeric' control, optional 'step'
@@ -87,8 +86,7 @@ class Status(TaskRunnable):
     """Just read the status & update."""
     type = TaskType.STATUS.value
 
-    @TaskRunnable.update_task_status()
-    def run(self, device: PhysicalDevice):
+    def _run(self, device: PhysicalDevice):
         Controller(device=device).read_status()
         return True
 
@@ -97,8 +95,7 @@ class HistoryLogger(TaskRunnable):
     """Log sensor values."""
     type = TaskType.HISTORY.value
 
-    @TaskRunnable.update_task_status()
-    def run(self, device: PhysicalDevice):
+    def _run(self, device: PhysicalDevice):
         controller = Controller(device=device)
         controller.log_sensors()
         return True
@@ -114,8 +111,7 @@ class Toggle(TaskRunnable):
         if not self.task.control:
             raise TaskNotCreatedException(f"Control needed for '{self.type}' task.")
 
-    @TaskRunnable.update_task_status()
-    def run(self, device: PhysicalDevice):
+    def _run(self, device: PhysicalDevice):
         control = self.task.control
         Controller(device=device).action(control)
         return True

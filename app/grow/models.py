@@ -1,19 +1,8 @@
-import json
 import logging
 import traceback
-import math
-from datetime import datetime
-
-from sqlalchemy import event
-from sqlalchemy.engine import Engine
-from sqlalchemy.orm import relationship
-from sqlalchemy.sql.expression import or_, and_
 
 from app import db
 from app.models import Base, Sensor, Control, Device
-from app.core.cache import CACHE
-from app.core.device import Device as PhysicalDevice
-from app.core.device import StatusResponse
 
 log = logging.getLogger(__name__)
 NOT_APPLICABLE = 'N/A'
@@ -157,6 +146,6 @@ def load_from_lists(properties=None, systems=None):
 
         db.session.commit()
     except Exception as e:
-        log.error("Failed to load grow properties/systems from configuration.")
-        db.session.rollback()
+        log.error(f"Failed to load grow properties/systems from configuration: {e}")
         traceback.print_exc()
+        db.session.rollback()

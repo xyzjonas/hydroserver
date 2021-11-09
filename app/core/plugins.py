@@ -59,8 +59,6 @@ class PluginManager:
             self.__is_initialized = True
 
     def __collect_task_types(self, path):
-        # plugin_base = PluginBase(package='app.plugins')
-        # self._plugin_source = plugin_base.make_plugin_source(searchpath=[path])
         if not os.path.isdir(path):
             log.error(f"Path '{path}' disappeared since last init. Skipping...")
             return
@@ -71,8 +69,8 @@ class PluginManager:
             with self.__plugin_source:
                 try:
                     module = self.__plugin_source.load_plugin(module_name)
-                except Exception:
-                    log.error(f"Failed to load plugin '{module_name}' "
+                except Exception as e:
+                    log.error(f"{e}: Failed to load plugin '{module_name}' "
                               f"located in {path}/{module_file}")
                     traceback.print_exc()
                     continue

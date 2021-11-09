@@ -36,8 +36,7 @@ from app.core.tasks import TaskRunnable
 class TestTask(TaskRunnable):
     type = '{task_type}'
 
-    @TaskRunnable.update_task_status()
-    def run(self, device):
+    def _run(self, device):
         x = 2 + 1
         return True
 """

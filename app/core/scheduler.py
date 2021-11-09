@@ -2,6 +2,7 @@ import logging
 import pprint
 import threading
 import time
+import traceback
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 
@@ -13,6 +14,8 @@ from app.core.device import Device as PhysicalDevice
 from app.system.device_mapper import DeviceMapper
 from app.core.tasks import ScheduledTask, TaskNotCreatedException
 
+
+# todo: create logger for each scheduler (i.e. each device)
 log = logging.getLogger(__name__)
 
 
@@ -50,11 +53,11 @@ class Scheduler:
             try:
                 self.__loop()
             except Exception as e:
-                # unexpected exceptions
-                log.fatal(f"{self}: [!!!] scheduler FAILED: \n{e}")
+                log.fatal(f"{self}: [!!!] scheduler FAILED: {e}")
+                traceback.print_exc()
                 self.__running = False
                 self.__should_be_running = False
-                self._set_scheduler_error(cause=str(e))
+                self._set_scheduler_error(str(e))
 
         t = threading.Thread(target=try_run)
         t.daemon = True
@@ -99,18 +102,25 @@ class Scheduler:
         dev.scheduler_error = None
         db.session.commit()
 
-    def __execute(self, task):
+    def _execute(self, task):
         """'execute task' function to be spawned in the thread executor."""
-        self.__last_executed.add(task)
-        log.debug(
-            f"{self.device.model.name}: executing '{task.runnable.type}' task (id={task.id})")
-        task.runnable.run(self.device.physical)
+        try:
+            self.__last_executed.add(task)
+            log.debug(f"{self.device.model.name}: executing '{task.runnable.type}' "
+                      f"task (id={task.task_id})")
+            task.runnable.run(self.device.physical)
+        except Exception as e:
+            log.error(f"Task '{task}' submission failed: {e}")
+            traceback.print_exc()
 
-    def __stop_scheduler(self):
+    def _stop_scheduler(self, message=None):
         """Scheduler stops itself from within the run loop."""
         self.executor.shutdown(wait=True)
         self.__running = False
+        self.__should_be_running = False
         CACHE.remove_scheduler(self.device.uuid)
+        if message:
+            self._set_scheduler_error(message)
 
     def __loop(self):
         """
@@ -129,10 +139,7 @@ class Scheduler:
                 attempts += 1
                 if attempts > self.RECONNECT_ATTEMPTS:
                     log.warning(f"{self}: device offline, stopping scheduling...")
-                    self.executor.shutdown(wait=True)
-                    self.__running = False
-                    self.__should_be_running = False
-                    CACHE.remove_scheduler(self.device.uuid)
+                    self._stop_scheduler(message="Device offline.")
                     return
                 to_be_scheduled = set()
                 log.warning(f"{self}: device offline, schedule cleared "
@@ -150,7 +157,7 @@ class Scheduler:
                 time_to_next = task.scheduled_time - datetime.utcnow()
                 # if inside the 'safe interval' execute right away and don't wait
                 if time_to_next <= timedelta(seconds=self.SAFE_INTERVAL):
-                    self.executor.submit(self.__execute, task)
+                    self.executor.submit(self._execute, task)
 
             active_tasks = to_be_scheduled.difference(self.__last_executed)
             active_tasks = sorted(active_tasks, key=lambda t: t.scheduled_time)
@@ -167,8 +174,7 @@ class Scheduler:
                 if no_task_retry_limit > self.RECONNECT_ATTEMPTS:
                     log.warning(
                         f"{self}: no tasks received for quite some time, stopping scheduling...")
-                    self.__stop_scheduler()
-                    self._set_scheduler_error("No scheduled tasks.")
+                    self._stop_scheduler(message="No scheduled tasks.")
                     return
 
             # 3) Time delta shenanigans
@@ -184,4 +190,4 @@ class Scheduler:
 
         # end WHILE
         log.info(f"{self} exiting...")
-        self.__stop_scheduler()
+        self._stop_scheduler()

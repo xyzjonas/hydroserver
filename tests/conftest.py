@@ -7,6 +7,7 @@ from app.core.device import http
 from app.system.device_controller import init_device
 from app.system.device_mapper import DeviceMapper
 from app.models import Control, Sensor, Task, Device
+from app.core.cache import CACHE
 from tests.constants import WIFI_DEVICE
 
 
@@ -33,12 +34,13 @@ def db_setup():
 # MOCKED
 @pytest.fixture
 def mocked_device():
-    return mock.MockedDevice()
+    dev = mock.MockedDevice()
+    CACHE.add_active_device(dev)
+    return dev
 
 
 @pytest.fixture()
 def mocked_device_and_db(mocked_device, db_setup):
-    # init_device(mocked_device)
     dev = Device(
         name="mocked-" + mocked_device.uuid,
         uuid=mocked_device.uuid,
@@ -51,8 +53,8 @@ def mocked_device_and_db(mocked_device, db_setup):
 
 
 @pytest.fixture()
-def mocked_device_with_sensor_and_control(mocked_device_and_db):
-    c = Control(device=mocked_device_and_db, name="switch_01")
+def mocked_device_with_sensor_and_control(mocked_device, mocked_device_and_db):
+    c = Control(device=mocked_device_and_db, name="switch_01", input="bool", value="True")
     s = Sensor(device=mocked_device_and_db, name="temp")
     db.session.add(c)
     db.session.add(s)

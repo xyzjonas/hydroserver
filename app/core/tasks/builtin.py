@@ -39,24 +39,47 @@ class Interval(TaskRunnable):
 
     @TaskRunnable.update_task_status()
     def run(self, device: PhysicalDevice):
+        """
+        Use interval (e.g. 10-20) to either turn on/off or adjust control
+        (depending on control type). In case of 'numeric' control, optional 'step'
+        metadata is used for the adjustment.
+        """
         self.log.info(f"{device}: running {self.type}")
-        sensor = db.session.query(Task).filter_by(id=self.task_id).first().sensor
-        control = db.session.query(Task).filter_by(id=self.task_id).first().control
-
-        response = device.read_sensor(sensor.name)
-        if not response.is_success:
-            raise TaskException(f"{device}: failed to read sensor {sensor.name}: {response}")
-        value = response.value
-
+        task_db = db.session.query(Task).filter_by(id=self.task_id).first()
+        sensor = task_db.sensor
+        control = task_db.control
         controller = Controller(device)
 
-        if value < self.interval[0] and not control.state:
-            self.log.info(f"{device}: {value} < {self.interval[0]}, switching on.")
-            controller.action(control)
+        value = sensor.get_recent_average()
 
-        if value > self.interval[1] and control.state:
-            self.log.info(f"{device}: {value} > {self.interval[1]}, switching off.")
-            controller.action(control)
+        def __parse_step_as_float():
+            try:
+                return float(task_db.task_metadata.get("step", 0.1))
+            except (TypeError, ValueError):
+                raise TaskException(
+                    f"Step value '{task_db.task_metadata.get('step', 0.1)}' is not a number.")
+
+        def __action(up=True):
+            if control.input == "bool":
+                if (up and not control.parsed_value) or (not up and control.parsed_value):
+                    controller.action(control)
+            elif control.input == "float":
+                new_value = control.parsed_value + __parse_step_as_float() if up \
+                    else control.parsed_value - __parse_step_as_float()
+                if new_value < 0 or new_value > 1:
+                    raise TaskException(f"Value out of bounds: {new_value}")
+                controller.action(control, value=new_value)
+            else:
+                raise TaskException(f"Cannot handle control type '{control.input}'.")
+
+        left, right = self.interval
+        if value < left:
+            self.log.info(f"{device}: {value} < {left}, going up.")
+            __action(up=True)
+
+        if value > right:
+            self.log.info(f"{device}: {value} > {right}, going down.")
+            __action(up=False)
         return True
 
 

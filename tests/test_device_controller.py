@@ -1,12 +1,10 @@
 import pytest
-from app import db, CACHE
 from app.system.device_controller import *
 from app.models import Device, Task
 
 
 @pytest.fixture
 def device(mocked_device):
-    CACHE.add_active_device(mocked_device)
     return mocked_device
 
 
@@ -26,7 +24,6 @@ def test_device_status_negative(device, mocked_device_and_db, return_data):
     """Test that read status marks device as offline"""
     def invalid_return_data(request_dict):
         return return_data
-    CACHE.add_active_device(device)
 
     controller = Controller(mocked_device_and_db)
     controller.read_status()
@@ -88,7 +85,8 @@ def device_register():
     assert False
 
 
-def test_refresh_devices(mocked_device_and_db):
+def test_refresh_devices(mocked_device, mocked_device_and_db):
+    CACHE.remove_active_device(mocked_device)
     assert not CACHE.get_active_device(mocked_device_and_db)
     refresh_devices(devices=[mocked_device_and_db])
     assert CACHE.get_active_device(mocked_device_and_db)

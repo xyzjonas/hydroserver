@@ -77,21 +77,37 @@ class ScheduledTask:
             raise TaskException(f"{task_db}: invalid cron definition '{task_db.cron}'")
 
 
-class TaskRunnable:
+class TaskRunnable(object):
     """
     Represents the actual operation to be executed. String 'type' is required.
     """
 
     log = logging.getLogger(__name__)
+    type = "abstract"
 
     def __init__(self, task_id: int):
         if not db.session.query(Task).filter_by(id=task_id).first():
             raise TaskNotCreatedException(f"No such task '{task_id}'.")
         self.task_id = task_id
 
-    def run(self, device):
-        """Return 'True' if all went well"""
+    def _run(self, device):
         raise NotImplemented
+
+    def run(self, device):
+        """Intercept and store unexpected errors"""
+        try:
+            self.log.debug(f"{device}: running {self.type}")
+            result = self._run(device)
+            if result:
+                Task.set_success(self.task_id)
+            else:
+                Task.set_failed(self.task_id, "Task returned 'False'")
+        except Exception as e:
+            self.log.error(f"Task Runnable failed: {e}")
+            traceback.print_exc()
+            Task.set_failed(self.task_id, e)
+        finally:
+            db.session.close()
 
     def _get_description(self):
         raise NotImplemented
@@ -110,30 +126,3 @@ class TaskRunnable:
         assert task.id
         instance = plugin_manager.get_class(type_)(task.id)
         return instance
-
-    @staticmethod
-    def update_task_status():
-        """Decorate run methods to update task state
-        and prevent unexpected failures."""
-        def decorate(func):
-            @functools.wraps(func)
-            def wrapper(*args, **kwargs):
-                task_id = None
-                try:
-                    task_id = args[0].task_id  # self
-                    TaskRunnable.log.debug(f"{args[1]}: running {args[0].type}")
-                    result = func(*args, **kwargs)
-                    if result:
-                        Task.set_success(task_id)
-                    else:
-                        Task.set_failed(task_id, "No errors, wrapped function returned 'False'")
-                except Exception as e:
-                    traceback.print_exc()
-                    if task_id:
-                        Task.set_failed(task_id, e)
-                    else:
-                        TaskRunnable.log.error("Decorated function is missing 'self' parameter.")
-                finally:
-                    db.session.close()
-            return wrapper
-        return decorate

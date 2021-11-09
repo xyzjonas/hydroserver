@@ -15,12 +15,12 @@ class Config(object):
     BAUD_RATE = 19200
 
     # Device status
-    STATUS_INTERVAL_SECONDS = 10  # i.e. how often is status issued
+    STATUS_INTERVAL_SECONDS = 15  # i.e. how often is status issued
     SENSOR_HISTORY_LOGGING_CRON = "*/20 * * * *"  # i.e. how often is sensor's value saved
 
     # Scheduler
     RECONNECT_ATTEMPTS = 10
-    IDLE_INTERVAL_SECONDS = STATUS_INTERVAL_SECONDS  # deprecated
+    IDLE_INTERVAL_SECONDS = 8  # deprecated
     SAFE_INTERVAL = 1.8  # seconds left to ignore and execute right away
     MAX_WORKERS = 4  # max threads to execute simultaneously
 

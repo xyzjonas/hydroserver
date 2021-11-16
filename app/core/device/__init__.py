@@ -162,6 +162,7 @@ class Device(object):
 
     def __init__(self):
         self._init()
+        log.info(f"[OK] Initialized: {self}")
 
     def __repr__(self):
         return f"<{self.__class__.__name__} (type={self.device_type.value})>"

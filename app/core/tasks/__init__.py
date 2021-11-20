@@ -59,6 +59,8 @@ class ScheduledTask:
     @classmethod
     def from_db_object(cls, task_db: Task):
         """Create the object and calculate next scheduled time."""
+        if task_db.paused:
+            return None
         try:
             # if cron is set to 'status', run each 10s todo: configurable
             if task_db.cron == 'status':

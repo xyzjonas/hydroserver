@@ -19,6 +19,11 @@ def test_from_db_object_status_cron(mocked_device_and_db, task_factory):
     assert sch
 
 
+def test_task_from_db_object_paused(mocked_device_and_db, task_factory):
+    t = task_factory(mocked_device_and_db, TaskType.STATUS.value, paused=True)
+    assert ScheduledTask.from_db_object(t) is None
+
+
 @pytest.mark.parametrize("task_type", [None, "", 123, -10, "asjdsa"])
 def test_runnable_from_database_task_negative(mocked_device_and_db, task_factory, task_type):
     t = task_factory(mocked_device_and_db, task_type)

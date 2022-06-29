@@ -30,7 +30,14 @@ class GrowSystemInstance(Base):
     __items__ = Base.__items__ + ['grow_properties']
 
     grow_system_id = db.Column(db.Integer, db.ForeignKey('grow_system.id'), nullable=False)
-    grow_system = db.relationship(GrowSystem, backref=db.backref('instances', lazy=True))
+    grow_system = db.relationship(
+        GrowSystem,
+        backref=db.backref(
+            'instances',
+            lazy=True,
+            cascade='all, delete-orphan'
+        )
+    )
 
     device_id = db.Column(db.Integer, db.ForeignKey('device.id'), nullable=False)
     device = db.relationship(Device, backref=db.backref('grow_system', lazy=True), uselist=False)
@@ -57,9 +64,10 @@ class GrowSystemInstance(Base):
 
 class GrowProperty(Base):
     """Predefined and user added property 'types': EC, pH, air temp, etc..."""
-    __items__ = ['name', 'description', 'color']
+    __items__ = ['id', 'name', 'description']
 
     # Color coding the properties across the system.
+    # DEPRECATED
     color = db.Column(db.String(9), nullable=True)
 
     name = db.Column(db.String(80), nullable=False)
@@ -95,57 +103,8 @@ class GrowPropertyInstance(Base):
         return self.grow_property.description
 
     @property
-    def color(self):
-        return self.grow_property.color
-
-    @property
     def dictionary(self):
         d = self._to_dict()
         d['name'] = self.name
         d['description'] = self.description
-        d['color'] = self.color
         return d
-
-
-def load_from_lists(properties=None, systems=None):
-    """Load pre-configured properties/systems."""
-    try:
-        if properties:
-            property_names = [p.name for p in GrowProperty.query.all()]
-            for prop in properties:
-                if 'name' not in prop:
-                    raise ValueError(f"Missing name for {prop}")
-                if prop['name'] in property_names:
-                    p = GrowProperty.query.filter_by(name=prop['name']).first()
-                else:
-                    p = GrowProperty(name=prop['name'])
-                    db.session.add(p)
-                p.description = prop.get('description', None)
-                p.color = prop.get('color', '#4d4d4d')  # default to dark grey
-        db.session.commit()
-
-        if systems:
-            system_names = [p.name for p in GrowSystem.query.all()]
-            for system in systems:
-                if 'name' not in system:
-                    raise ValueError(f"Missing name for {system}")
-                if system['name'] in system_names:
-                    s = GrowSystem.query.filter_by(name=system['name']).first()
-                else:
-                    s = GrowSystem(name=system['name'])
-                    db.session.add(s)
-                s.description = system.get('description', None)
-
-                for required_property in system.get('required_properties', []):
-                    if required_property not in [gp.name for gp in s.properties]:
-                        gp = GrowProperty.query.filter_by(name=required_property).first()
-                        if not gp:
-                            raise ValueError(f'Required property \'{required_property}\''
-                                             f'for system \'{system["name"]}\' not in db.')
-                        s.properties = list(s.properties) + [gp]
-
-        db.session.commit()
-    except Exception as e:
-        log.error(f"Failed to load grow properties/systems from configuration: {e}")
-        traceback.print_exc()
-        db.session.rollback()

@@ -1,5 +1,5 @@
-import datetime
 import logging
+from datetime import datetime, timedelta
 from functools import lru_cache
 
 from croniter import croniter, CroniterNotAlphaError, CroniterBadCronError
@@ -12,7 +12,7 @@ from app.system.device_controller import (
     run_scheduler, register_device, scan_devices, refresh_devices
 )
 from app.core.cache import CACHE
-from app.models import db, Device, Task, Control, Sensor
+from app.models import db, Device, Task, Control, Sensor, HistoryItem
 
 log = logging.getLogger(__name__)
 
@@ -54,6 +54,16 @@ def get_device(device_id):
     data = device.dictionary
     # show only in single device resource
     data['grow_system'] = device.get_grow_system()
+
+    def __sort_props(prop):
+        """Make sure properties with assigned sensors/controls are at the top"""
+        if not prop.get('sensor') or prop.get('control'):
+            return 'zzzzzzzzzz'
+        else:
+            return prop['description']
+    if data.get('grow_system') and data['grow_system'].get('grow_properties'):
+        data['grow_system']['grow_properties'] = sorted(
+            data['grow_system']['grow_properties'], key=__sort_props)
     return jsonify(data)
 
 
@@ -91,7 +101,7 @@ def get_device_sensor_history(device_id, sensor_id):
     since_datetime = None
     if timestamp_millis_string:
         try:
-            since_datetime = datetime.datetime.fromtimestamp(
+            since_datetime = datetime.fromtimestamp(
                 int(timestamp_millis_string)/1000  # convert millis -> seconds
             )
         except (TypeError, ValueError) as e:
@@ -103,11 +113,27 @@ def get_device_sensor_history(device_id, sensor_id):
         except (TypeError, ValueError) as e:
             return f"Invalid value 'count' supplied: {e}", 400
 
+    # Don't cache the most recent queries
+    if (since_datetime and datetime.now() - since_datetime < timedelta(days=1, hours=12)) \
+       or (count and count < 100):
+        sensor = db.session.query(Sensor).filter_by(id=_get_id(sensor_id)).first_or_404()
+        return jsonify(sensor.get_last_values(since=since_datetime, count=count)), 200
+
     # Cache the result with the current hour datetime as well.
-    now = datetime.datetime.utcnow()
-    now = datetime.datetime(now.year, now.month, now.day, now.hour, 0, 0)
+    now = datetime.utcnow()
+    now = datetime(now.year, now.month, now.day, now.hour, 0, 0)
     items = cached_call(now, sensor_id, since_datetime, count)
     return jsonify(items), 200
+
+
+@bp.route('/devices/<int:device_id>/sensors/<int:sensor_id>/history', methods=['DELETE'])
+def clear_sensor_history(device_id, sensor_id):
+    sensor = db.session.query(Sensor).filter_by(id=_get_id(sensor_id)).first_or_404()
+    entire_history = db.session.query(HistoryItem).filter_by(sensor_id=sensor.id)
+    for item in entire_history:
+        db.session.delete(item)
+    db.session.commit()
+    return 'History cleared.', 200
 
 
 @bp.route('/devices/<int:device_id>/sensors/<int:sensor_id>', methods=['POST'])

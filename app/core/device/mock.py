@@ -1,3 +1,4 @@
+import random
 import uuid
 
 from app.core.device import Device, DeviceType, Command
@@ -42,12 +43,12 @@ class MockedDevice(Device):
             "temp": {
                 "type": "sensor",
                 "unit": "°C",
-                "value": 23.1,
+                "value": f"{random.randint(-15, 40)}.{random.randint(0,9)}",
             },
             "hum": {
                 "type": "sensor",
                 "unit": "%",
-                "value": 50.1,
+                "value": f"{random.randint(0, 100)}.{random.randint(0,9)}",
             },
             "switch_01":  {
                 "type": "control",

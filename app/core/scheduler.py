@@ -105,7 +105,6 @@ class Scheduler:
     def _execute(self, task):
         """'execute task' function to be spawned in the thread executor."""
         try:
-            self.__last_executed.add(task)
             log.debug(f"{self.device.model.name}: executing '{task.runnable.type}' "
                       f"task (id={task.task_id})")
             task.runnable.run(self.device.physical)
@@ -157,6 +156,7 @@ class Scheduler:
                 time_to_next = task.scheduled_time - datetime.utcnow()
                 # if inside the 'safe interval' execute right away and don't wait
                 if time_to_next <= timedelta(seconds=self.SAFE_INTERVAL):
+                    self.__last_executed.add(task)
                     self.executor.submit(self._execute, task)
 
             active_tasks = to_be_scheduled.difference(self.__last_executed)

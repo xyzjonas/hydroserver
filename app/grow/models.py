@@ -27,7 +27,7 @@ class GrowSystem(Base):
 
 class GrowSystemInstance(Base):
     """A grow system instance bound to an actual device, one-to-one."""
-    __items__ = Base.__items__ + ['grow_properties']
+    __items__ = Base.__items__ + ['properties']
 
     grow_system_id = db.Column(db.Integer, db.ForeignKey('grow_system.id'), nullable=False)
     grow_system = db.relationship(
@@ -92,7 +92,7 @@ class GrowPropertyInstance(Base):
     grow_system_id = db.Column(db.Integer, db.ForeignKey('grow_system_instance.id'), nullable=True)
     grow_system = db.relationship(GrowSystemInstance,
                                   backref=db.backref(
-                                      'grow_properties', lazy=False, cascade='all, delete-orphan'))
+                                      'properties', lazy=False, cascade='all, delete-orphan'))
 
     @property
     def name(self):

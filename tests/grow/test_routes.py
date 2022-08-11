@@ -54,7 +54,7 @@ def test_get_system_instance(mocked_device_with_sensor_and_control, setup, app_s
 
         data = response.json
         assert data['device']
-        assert data['grow_properties']
+        assert data['properties'] == []
 
 
 def test_assign_system_to_device(mocked_device_with_sensor_and_control,
@@ -62,30 +62,30 @@ def test_assign_system_to_device(mocked_device_with_sensor_and_control,
                                  setup_blueprints):
     device, _, _ = mocked_device_with_sensor_and_control
     props, _, system = setup_blueprints
-    url = f'/grow/systems/{device.id}'
+    url = f'/grow/systems/assign'
     with app_setup.test_client() as client:
-        response = client.post(url, json={'system_id': system.id})
+        response = client.post(url, json={'system_id': system.id, 'device_id': device.id})
         assert response.status_code == 201
 
     system_instance = GrowSystemInstance.query.filter_by(device=device).first()
     assert system_instance
     for prop in system.properties:
-        assert prop.name in [g.name for g in system_instance.grow_properties]
+        assert prop.name in [g.name for g in system_instance.properties]
 
 
 @pytest.fixture()
 def prepare_for_delete(mocked_device_with_sensor_and_control, setup_blueprints, app_setup):
     device, _, _ = mocked_device_with_sensor_and_control
     props, _, system = setup_blueprints
-    url = f'/grow/systems/{device.id}'
+    url = f'/grow/systems/assign'
     with app_setup.test_client() as client:
-        response = client.post(url, json={'system_id': system.id})
+        response = client.post(url, json={'system_id': system.id, 'device_id': device.id})
         assert response.status_code == 201
 
     system_instance = GrowSystemInstance.query.filter_by(device=device).first()
     assert system_instance
     for prop in system.properties:
-        assert prop.name in [g.name for g in system_instance.grow_properties]
+        assert prop.name in [g.name for g in system_instance.properties]
 
     return system_instance
 

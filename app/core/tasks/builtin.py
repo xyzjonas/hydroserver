@@ -107,13 +107,13 @@ class Toggle(TaskRunnable):
 
     def __init__(self, task_id: int):
         super(Toggle, self).__init__(task_id)
-        self.task = db.session.query(Task).filter_by(id=task_id).first()
-        if not self.task.control:
+        task = db.session.query(Task).filter_by(id=task_id).first()
+        if not task.control:
             raise TaskNotCreatedException(f"Control needed for '{self.type}' task.")
 
     def _run(self, device: PhysicalDevice):
-        control = self.task.control
-        Controller(device=device).action(control)
+        task = db.session.query(Task).filter_by(id=self.task_id).first()
+        Controller(device=device).action(task.control)
         return True
 
 
@@ -121,13 +121,12 @@ class OnTask(Toggle):
     type = TaskType.ON.value
 
     def _run(self, device):
-        self.log.info(f"Running ON")
-        self.log.info(f"Control value: {self.task.control.parsed_value}")
-        if self.task.control.parsed_value is not True:
-            self.log.info(f"Was off, toggling...")
+        task = db.session.query(Task).filter_by(id=self.task_id).first()
+        if task.control.parsed_value is not True:
+            self.log.debug(f"Was off, toggling...")
             super()._run(device)
         else:
-            self.log.info(f"Was already on, doing nothing...")
+            self.log.debug(f"Was already on, doing nothing...")
         return True
 
 
@@ -135,9 +134,8 @@ class OffTask(Toggle):
     type = TaskType.OFF.value
 
     def _run(self, device):
-        self.log.info(f"Running OFF")
-        self.log.info(f"Control value: {self.task.control.parsed_value}")
-        if self.task.control.parsed_value is True:
+        task = db.session.query(Task).filter_by(id=self.task_id).first()
+        if task.control.parsed_value is True:
             self.log.info(f"Was on, toggling...")
             super()._run(device)
         else:

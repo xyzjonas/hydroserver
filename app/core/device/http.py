@@ -56,7 +56,7 @@ class HttpDevice(Device):
         self.__uuid = uuid
 
     def is_site_online(self):
-        """A basic Wifi device is realized as an HTTP server accepting GET on '/'"""
+        """A basic Wi-Fi device is realized as an HTTP server accepting GET on '/'"""
         try:
             return not requests.get(self.url).status_code >= 300
         except requests.RequestException:
@@ -75,13 +75,12 @@ class HttpDevice(Device):
                 'reason': f'HTTP {response.status_code}, {response.text}'
             }
 
-        # fixme: item values can be further dicts encoded as string...
         response_dict = response.json()
         for k, v in response_dict.items():
+            # Item values can be dicts encoded as string.
             try:
                 response_dict[k] = json.loads(v)
             except (json.JSONDecodeError, TypeError):
-                traceback.print_exc()
                 pass
 
         self.__is_responding = True

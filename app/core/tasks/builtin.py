@@ -115,3 +115,32 @@ class Toggle(TaskRunnable):
         control = self.task.control
         Controller(device=device).action(control)
         return True
+
+
+class OnTask(Toggle):
+    type = TaskType.ON.value
+
+    def _run(self, device):
+        self.log.info(f"Running ON")
+        self.log.info(f"Control value: {self.task.control.parsed_value}")
+        if self.task.control.parsed_value is not True:
+            self.log.info(f"Was off, toggling...")
+            super()._run(device)
+        else:
+            self.log.info(f"Was already on, doing nothing...")
+        return True
+
+
+class OffTask(Toggle):
+    type = TaskType.OFF.value
+
+    def _run(self, device):
+        self.log.info(f"Running OFF")
+        self.log.info(f"Control value: {self.task.control.parsed_value}")
+        if self.task.control.parsed_value is True:
+            self.log.info(f"Was on, toggling...")
+            super()._run(device)
+        else:
+            self.log.info(f"Was already off, doing nothing...")
+        return True
+

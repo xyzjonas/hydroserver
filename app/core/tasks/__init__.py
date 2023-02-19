@@ -28,6 +28,8 @@ class TaskType(Enum):
     INTERVAL = "interval"
     STATUS = "status"
     HISTORY = "history"
+    ON = "on"
+    OFF = "off"
 
     @classmethod
     def from_string(cls, string):

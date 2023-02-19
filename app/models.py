@@ -20,6 +20,10 @@ class UnexpectedModelException(Exception):
     pass
 
 
+class InvalidValieError(Exception):
+    pass
+
+
 class Base(db.Model):
     __items__ = ['id']  # use to specify REST available items
 
@@ -79,7 +83,7 @@ class Base(db.Model):
                 return round(float(value), 2)
             except (TypeError, ValueError) as e:
                 pass
-        raise TypeError(f'\'float\' cast failed for value {value}')
+        raise InvalidValieError(f'\'float\' cast failed for value {value}')
 
 
 class Sensor(Base):
@@ -135,7 +139,7 @@ class Sensor(Base):
             pass
 
         if type(value) not in [bool, int, float]:
-            raise TypeError(f"Cannot store '{type(value)}' as sensor value.")
+            raise InvalidValieError(f"Cannot store '{type(value)}' as sensor value.")
         self._value = str(value)
 
     def get_recent_average(self, count=5):
@@ -413,7 +417,11 @@ class Device(Base):
                         device=self,
                         unit=value.get("unit", NOT_APPLICABLE)
                     )
-                sensor.last_value = value.get('value')
+                try:
+                    sensor.last_value = value.get('value')
+                except InvalidValieError as e:
+                    log.error(f"Sensor's value not allowed: '{e}'")
+                    continue
 
             # todo: legacy remove!
             elif key in controls_keys:

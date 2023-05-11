@@ -1,0 +1,49 @@
+---
+version: "3"
+services:
+  ui:
+    build:
+      context: hydroweb
+      dockerfile: Dockerfile
+    environment:
+      API_URL: "http://api"
+    ports:
+      - 8080:80
+    networks:
+    - bridge-network
+
+  migrations:
+    depends_on:
+      - db
+    build:
+      context: hydroserver
+      dockerfile: Dockerfile
+    command: flask db upgrade head
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db/postgres
+    networks:
+      - bridge-network
+
+  api:
+    depends_on:
+      - migrations
+    build:
+      context: hydroserver
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db/postgres
+    ports:
+      - 8081:80
+    networks:
+      - bridge-network
+
+  db:
+    image: postgres:latest
+    environment:
+      POSTGRES_PASSWORD: postgres
+    networks:
+      - bridge-network
+
+networks:
+  bridge-network:
+    driver: bridge

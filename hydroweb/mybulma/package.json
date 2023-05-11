@@ -1,0 +1,17 @@
+{
+  "name": "mybulma",
+  "version": "1.0.0",
+  "description": "Modified bulma",
+  "main": "sass/mystyle.scss",
+  "scripts": {
+    "css-build": "node-sass --omit-source-map-url sass/mystyle.scss ../public/mystyle.css",
+    "css-watch": "npm run css-build -- --watch",
+    "start": "npm run css-watch"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "bulma": "^0.9.1",
+    "node-sass": "^4.9.2"
+  }
+}

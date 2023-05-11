@@ -18,10 +18,14 @@ db = SQLAlchemy(session_options={"autoflush": False})
 migrate = Migrate()
 config = None
 
-logging.basicConfig(level=logging.DEBUG,
-                    format='%(asctime)s [%(levelname)s] %(message)s',
-                    datefmt='%d/%m/%Y %H:%M:%S')
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%d/%m/%Y %H:%M:%S'
+)
 log = logging.getLogger(__name__)
+
+logging.getLogger('flask_cors').level = logging.DEBUG
 
 
 class CustomJSONEncoder(JSONEncoder):
@@ -68,7 +72,7 @@ def create_app(config_class=Config):
     from app.core.plugins import plugin_manager
     plugin_manager.initialize()
 
-    CORS(app, resources={r'/*': {'origins': '*'}})
+    CORS(app)
 
     return app
 
